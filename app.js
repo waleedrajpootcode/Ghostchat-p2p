@@ -6,6 +6,11 @@ let myId = localStorage.getItem('ghost_my_id') || 'user_' + Math.floor(1000 + Ma
 localStorage.setItem('ghost_my_id', myId);
 document.getElementById('my-peer-id').textContent = myId;
 
+// Request Desktop Notifications Permission
+if ("Notification" in window && Notification.permission !== "granted") {
+  Notification.requestPermission();
+}
+
 document.getElementById('btn-copy-id').onclick = () => {
   navigator.clipboard.writeText(myId);
   alert("Your ID Copied: " + myId);
@@ -15,7 +20,6 @@ const peer = new Peer(myId);
 let activeConn = null;
 let currentContactPeerId = null;
 let activeMediaCall = null;
-// Contacts Array: [{ name: 'Ali Bhai', id: 'user_1234' }]
 let contacts = JSON.parse(localStorage.getItem('ghost_admin_contacts') || '[]');
 
 // --- 2. ADMIN LOCK LOGIC ---
@@ -57,13 +61,13 @@ adminBtn.onclick = () => {
   }
 };
 
-// --- 3. INDEXEDDB SETUP ---
+// --- 3. INDEXEDDB WITH UNIQUE MSG IDS ---
 let db;
-const dbReq = indexedDB.open('GhostChatDB', 2);
+const dbReq = indexedDB.open('GhostChatDB', 3);
 dbReq.onupgradeneeded = (e) => {
   db = e.target.result;
   if (!db.objectStoreNames.contains('messages')) {
-    const store = db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true });
+    const store = db.createObjectStore('messages', { keyPath: 'msgId' });
     store.createIndex('contactId', 'contactId', { unique: false });
   }
 };
@@ -72,29 +76,59 @@ dbReq.onsuccess = (e) => {
   if (isAdmin) renderContacts();
 };
 
-function saveMessageLocally(contactId, sender, text, fileData = null, fileType = null) {
+function saveMessageLocally(msgId, contactId, sender, text, fileData = null, fileType = null) {
+  if (!db) return;
   const tx = db.transaction('messages', 'readwrite');
   const store = tx.objectStore('messages');
-  store.add({ contactId, sender, text, fileData, fileType, timestamp: Date.now() });
+  store.put({ msgId, contactId, sender, text, fileData, fileType, timestamp: Date.now() });
+}
+
+function deleteMessageLocally(msgId) {
+  if (!db) return;
+  const tx = db.transaction('messages', 'readwrite');
+  const store = tx.objectStore('messages');
+  store.delete(msgId);
 }
 
 function loadContactMessages(contactId) {
   const container = document.getElementById('messages-container');
   container.innerHTML = '';
+  if (!db) return;
   const tx = db.transaction('messages', 'readonly');
   const store = tx.objectStore('messages');
   const index = store.index('contactId');
   const req = index.getAll(contactId);
 
   req.onsuccess = () => {
-    req.result.forEach(msg => appendMessageUI(msg.sender === myId ? 'sent' : 'received', msg.text, msg.fileData, msg.fileType));
+    req.result.forEach(msg => appendMessageUI(msg.msgId, msg.sender === myId ? 'sent' : 'received', msg.text, msg.fileData, msg.fileType));
   };
 }
 
-// --- 4. PEERJS CONNECTION ---
-peer.on('connection', (conn) => {
-  setupConnection(conn);
-});
+// --- 4. SOUND EFFECTS & NOTIFICATIONS ---
+function playMsgSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.15);
+  } catch (e) {}
+}
+
+function sendDesktopNotification(title, body) {
+  if ("Notification" in window && Notification.permission === "granted" && document.hidden) {
+    new Notification(title, { body, icon: 'https://cdn-icons-png.flaticon.com/512/9446/9446864.png' });
+  }
+}
+
+// --- 5. PEERJS CONNECTION ---
+peer.on('connection', (conn) => setupConnection(conn));
 
 function connectToPeer(targetId, targetName = null) {
   if (targetId === myId) return alert("You cannot connect to yourself!");
@@ -130,14 +164,23 @@ function getContactName(peerId) {
   return c ? c.name : null;
 }
 
-// --- 5. DATA INCOMING ---
+// --- 6. DATA INCOMING & DELETE LOGIC ---
 function handleIncomingData(data) {
   if (data.type === 'chat') {
-    appendMessageUI('received', data.text);
-    saveMessageLocally(activeConn.peer, activeConn.peer, data.text);
+    playMsgSound();
+    sendDesktopNotification("New Message from " + (getContactName(activeConn.peer) || activeConn.peer), data.text);
+    appendMessageUI(data.msgId, 'received', data.text);
+    saveMessageLocally(data.msgId, activeConn.peer, activeConn.peer, data.text);
   } else if (data.type === 'file') {
-    appendMessageUI('received', '', data.fileData, data.fileType);
-    saveMessageLocally(activeConn.peer, activeConn.peer, '', data.fileData, data.fileType);
+    playMsgSound();
+    sendDesktopNotification("Media Received", "Friend sent a photo/video");
+    appendMessageUI(data.msgId, 'received', '', data.fileData, data.fileType);
+    saveMessageLocally(data.msgId, activeConn.peer, activeConn.peer, '', data.fileData, data.fileType);
+  } else if (data.type === 'delete_msg') {
+    // Delete on both sides!
+    const el = document.getElementById(`msg-${data.msgId}`);
+    if (el) el.remove();
+    deleteMessageLocally(data.msgId);
   } else if (data.type === 'call_ring') {
     showIncomingCallUI();
   } else if (data.type === 'call_accepted') {
@@ -150,16 +193,17 @@ function handleIncomingData(data) {
   }
 }
 
-// --- 6. CHAT & FILE SENDING ---
+// --- 7. CHAT, FILE & DELETE SENDING ---
 document.getElementById('chat-form').onsubmit = (e) => {
   e.preventDefault();
   const input = document.getElementById('message-input');
   const text = input.value.trim();
   if (!text || !activeConn) return;
 
-  activeConn.send({ type: 'chat', text });
-  appendMessageUI('sent', text);
-  saveMessageLocally(activeConn.peer, myId, text);
+  const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random()*1000);
+  activeConn.send({ type: 'chat', text, msgId });
+  appendMessageUI(msgId, 'sent', text);
+  saveMessageLocally(msgId, activeConn.peer, myId, text);
   input.value = '';
 };
 
@@ -170,19 +214,25 @@ document.getElementById('file-input').onchange = (e) => {
   const reader = new FileReader();
   reader.onload = () => {
     const fileData = reader.result;
-    activeConn.send({ type: 'file', fileData, fileType: file.type });
-    appendMessageUI('sent', '', fileData, file.type);
-    saveMessageLocally(activeConn.peer, myId, '', fileData, file.type);
+    const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random()*1000);
+    activeConn.send({ type: 'file', fileData, fileType: file.type, msgId });
+    appendMessageUI(msgId, 'sent', '', fileData, file.type);
+    saveMessageLocally(msgId, activeConn.peer, myId, '', fileData, file.type);
   };
   reader.readAsDataURL(file);
 };
 
-function appendMessageUI(type, text, fileData = null, fileType = null) {
+function appendMessageUI(msgId, type, text, fileData = null, fileType = null) {
   const container = document.getElementById('messages-container');
   const msgDiv = document.createElement('div');
   msgDiv.className = `msg ${type}`;
+  msgDiv.id = `msg-${msgId}`;
 
-  if (text) msgDiv.textContent = text;
+  if (text) {
+    const span = document.createElement('span');
+    span.textContent = text;
+    msgDiv.appendChild(span);
+  }
   if (fileData) {
     if (fileType.startsWith('image/')) {
       const img = document.createElement('img');
@@ -195,11 +245,27 @@ function appendMessageUI(type, text, fileData = null, fileType = null) {
       msgDiv.appendChild(vid);
     }
   }
+
+  // Delete Button
+  const delBtn = document.createElement('button');
+  delBtn.className = 'btn-del-msg';
+  delBtn.innerHTML = '🗑️ Delete';
+  delBtn.onclick = () => {
+    if (confirm("Delete this message for everyone?")) {
+      msgDiv.remove();
+      deleteMessageLocally(msgId);
+      if (activeConn) {
+        activeConn.send({ type: 'delete_msg', msgId });
+      }
+    }
+  };
+  msgDiv.appendChild(delBtn);
+
   container.appendChild(msgDiv);
   container.scrollTop = container.scrollHeight;
 }
 
-// --- 7. CALL & RINGTONE ---
+// --- 8. CALL & RINGTONE ---
 const ringtone = document.getElementById('ringtone');
 function playRingtone() {
   ringtone.play().catch(() => {
@@ -207,7 +273,7 @@ function playRingtone() {
     const osc = ctx.createOscillator();
     osc.connect(ctx.destination);
     osc.start();
-    setTimeout(() => osc.stop(), 2000);
+    setTimeout(() => osc.stop(), 2500);
   });
 }
 function stopRingtone() { ringtone.pause(); ringtone.currentTime = 0; }
@@ -223,6 +289,7 @@ document.getElementById('btn-start-call').onclick = () => {
 function showIncomingCallUI() {
   playRingtone();
   const name = getContactName(activeConn.peer) || activeConn.peer;
+  sendDesktopNotification("Incoming Call!", `${name} is calling you now!`);
   document.getElementById('call-modal').classList.remove('hidden');
   document.getElementById('call-status-title').textContent = "Incoming Call from " + name;
   document.getElementById('btn-accept-call').classList.remove('hidden');
@@ -253,7 +320,7 @@ document.getElementById('my-live-input').oninput = (e) => {
   if (activeConn) activeConn.send({ type: 'live_typing', text: e.target.value });
 };
 
-// --- 8. SCREEN SHARE ---
+// --- 9. SCREEN SHARE WITH RING ---
 document.getElementById('btn-screen-share').onclick = async () => {
   if (!activeConn) return;
   try {
@@ -268,6 +335,8 @@ document.getElementById('btn-screen-share').onclick = async () => {
 
 peer.on('call', (call) => {
   activeMediaCall = call;
+  playMsgSound();
+  sendDesktopNotification("Screen Share", "Friend started sharing screen");
   call.answer();
   call.on('stream', (remoteStream) => {
     const video = document.getElementById('remote-screen-video');
@@ -278,7 +347,7 @@ peer.on('call', (call) => {
   });
 });
 
-// --- 9. ADMIN CONTACTS MANAGEMENT ---
+// --- 10. ADMIN CONTACTS MANAGEMENT ---
 document.getElementById('btn-add-contact').onclick = () => {
   if (!isAdmin) return;
   const nameInput = document.getElementById('target-contact-name');
@@ -288,7 +357,6 @@ document.getElementById('btn-add-contact').onclick = () => {
 
   if (!name || !id) return alert("Please enter both Name and Peer ID!");
 
-  // Save or update contact
   const existing = contacts.find(c => c.id === id);
   if (existing) {
     existing.name = name;
@@ -326,7 +394,7 @@ function toggleInputs(enabled) {
   document.getElementById('btn-screen-share').disabled = !enabled;
 }
 
-// --- 10. PRIVACY EVENTS ---
+// --- 11. PRIVACY BLUR ---
 window.addEventListener('blur', () => document.getElementById('privacy-shield').classList.remove('hidden'));
 window.addEventListener('focus', () => document.getElementById('privacy-shield').classList.add('hidden'));
 document.addEventListener('contextmenu', e => e.preventDefault());

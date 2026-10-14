@@ -156,16 +156,32 @@ body {
   gap: 10px;
 }
 
+/* MESSAGE BUBBLES WITH DELETE ICON */
 .msg {
   max-width: 65%;
   padding: 8px 12px;
   border-radius: 8px;
   font-size: 14px;
   word-break: break-word;
+  position: relative;
+  display: flex;
+  flex-direction: column;
 }
 .msg.sent { align-self: flex-end; background: #005c4b; color: #e9edef; }
 .msg.received { align-self: flex-start; background: #202c33; color: #e9edef; }
 .msg img, .msg video { max-width: 100%; border-radius: 6px; margin-top: 5px; }
+
+.btn-del-msg {
+  align-self: flex-end;
+  background: transparent;
+  border: none;
+  color: #8696a0;
+  font-size: 11px;
+  cursor: pointer;
+  margin-top: 4px;
+  opacity: 0.7;
+}
+.btn-del-msg:hover { color: #ea0038; opacity: 1; }
 
 .chat-input-bar {
   padding: 10px 20px;
