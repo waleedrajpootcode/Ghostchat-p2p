@@ -17,7 +17,7 @@
 
   <div class="app-container">
     
-    <!-- LEFT SIDEBAR (Sirf Admin ko dikhegi ya PIN se unlock hogi) -->
+    <!-- LEFT SIDEBAR -->
     <aside class="sidebar" id="sidebar">
       <div class="my-profile">
         <div class="brand-row">
@@ -29,7 +29,7 @@
         </p>
       </div>
 
-      <!-- Yeh section sirf Admin PIN 2007 lagane par show hoga -->
+      <!-- Admin Panel (PIN 2007) -->
       <div id="admin-controls" class="hidden">
         <div class="admin-badge">⚡ Admin Mode Activated</div>
         <div class="add-contact">
@@ -40,11 +40,11 @@
 
         <div class="contacts-header">My Private Contacts</div>
         <ul id="contacts-list" class="contacts-list">
-          <!-- Sirf Admin ke contacts yahan load honge -->
+          <!-- Contacts dynamically loaded here -->
         </ul>
       </div>
 
-      <!-- Guest mode message jab PIN na laga ho -->
+      <!-- Guest mode message -->
       <div id="guest-message" class="guest-panel">
         <p>🔒 End-to-End Encrypted Private Terminal</p>
         <small>Waiting for Admin to start conversation...</small>
@@ -86,7 +86,11 @@
     <div class="modal-content">
       <h3 id="call-status-title">Incoming Call...</h3>
       
-      <video id="remote-screen-video" autoplay playsinline class="hidden"></video>
+      <!-- Big Screen Share Video + Fullscreen Button -->
+      <div id="screen-wrapper" class="screen-video-wrapper hidden">
+        <video id="remote-screen-video" autoplay playsinline></video>
+        <button type="button" class="btn-fullscreen" onclick="toggleVideoFullscreen()">⛶ Fullscreen</button>
+      </div>
       
       <div class="live-call-box">
         <h4>Live Real-time Call:</h4>

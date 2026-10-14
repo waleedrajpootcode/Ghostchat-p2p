@@ -6,7 +6,6 @@ let myId = localStorage.getItem('ghost_my_id') || 'user_' + Math.floor(1000 + Ma
 localStorage.setItem('ghost_my_id', myId);
 document.getElementById('my-peer-id').textContent = myId;
 
-// Request Desktop Notifications Permission
 if ("Notification" in window && Notification.permission !== "granted") {
   Notification.requestPermission();
 }
@@ -61,16 +60,19 @@ adminBtn.onclick = () => {
   }
 };
 
-// --- 3. INDEXEDDB WITH UNIQUE MSG IDS ---
+// --- 3. INDEXEDDB SETUP (VERSION 4 - FIXED CLEAN STORE) ---
 let db;
-const dbReq = indexedDB.open('GhostChatDB', 3);
+const dbReq = indexedDB.open('GhostChatDB', 4);
+
 dbReq.onupgradeneeded = (e) => {
   db = e.target.result;
-  if (!db.objectStoreNames.contains('messages')) {
-    const store = db.createObjectStore('messages', { keyPath: 'msgId' });
-    store.createIndex('contactId', 'contactId', { unique: false });
+  if (db.objectStoreNames.contains('messages')) {
+    db.deleteObjectStore('messages');
   }
+  const store = db.createObjectStore('messages', { keyPath: 'msgId' });
+  store.createIndex('contactId', 'contactId', { unique: false });
 };
+
 dbReq.onsuccess = (e) => {
   db = e.target.result;
   if (isAdmin) renderContacts();
@@ -100,24 +102,41 @@ function loadContactMessages(contactId) {
   const req = index.getAll(contactId);
 
   req.onsuccess = () => {
-    req.result.forEach(msg => appendMessageUI(msg.msgId, msg.sender === myId ? 'sent' : 'received', msg.text, msg.fileData, msg.fileType));
+    req.result.forEach(msg => appendMessageUI(msg.msgId, msg.sender === myId ? 'sent' : 'received', msg.text, msg.fileData, msg.fileType, msg.timestamp));
   };
 }
 
-// --- 4. SOUND EFFECTS & NOTIFICATIONS ---
-function playMsgSound() {
+// --- 4. HEAVY / LOUD SOUND CHIME ---
+function playLoudChime() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
-    gain.gain.setValueAtTime(0.2, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.15);
+    
+    // Tone 1: High crisp ding
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
+    gain1.gain.setValueAtTime(0.5, ctx.currentTime);
+    gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start();
+    osc1.stop(ctx.currentTime + 0.35);
+
+    // Tone 2: Rich deeper chime (dong)
+    setTimeout(() => {
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(880, ctx.currentTime); // A5
+      gain2.gain.setValueAtTime(0.6, ctx.currentTime);
+      gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start();
+      osc2.stop(ctx.currentTime + 0.5);
+    }, 120);
+
   } catch (e) {}
 }
 
@@ -164,20 +183,20 @@ function getContactName(peerId) {
   return c ? c.name : null;
 }
 
-// --- 6. DATA INCOMING & DELETE LOGIC ---
+// --- 6. DATA INCOMING & PERMANENT DELETE ---
 function handleIncomingData(data) {
   if (data.type === 'chat') {
-    playMsgSound();
-    sendDesktopNotification("New Message from " + (getContactName(activeConn.peer) || activeConn.peer), data.text);
-    appendMessageUI(data.msgId, 'received', data.text);
+    playLoudChime();
+    sendDesktopNotification("Message from " + (getContactName(activeConn.peer) || activeConn.peer), data.text);
+    appendMessageUI(data.msgId, 'received', data.text, null, null, data.timestamp);
     saveMessageLocally(data.msgId, activeConn.peer, activeConn.peer, data.text);
   } else if (data.type === 'file') {
-    playMsgSound();
+    playLoudChime();
     sendDesktopNotification("Media Received", "Friend sent a photo/video");
-    appendMessageUI(data.msgId, 'received', '', data.fileData, data.fileType);
+    appendMessageUI(data.msgId, 'received', '', data.fileData, data.fileType, data.timestamp);
     saveMessageLocally(data.msgId, activeConn.peer, activeConn.peer, '', data.fileData, data.fileType);
-  } else if (data.type === 'delete_msg') {
-    // Delete on both sides!
+  } else if (data.type === 'delete_msg_everyone') {
+    // Delete permanently from receiver side too
     const el = document.getElementById(`msg-${data.msgId}`);
     if (el) el.remove();
     deleteMessageLocally(data.msgId);
@@ -193,16 +212,17 @@ function handleIncomingData(data) {
   }
 }
 
-// --- 7. CHAT, FILE & DELETE SENDING ---
+// --- 7. CHAT SENDING ---
 document.getElementById('chat-form').onsubmit = (e) => {
   e.preventDefault();
   const input = document.getElementById('message-input');
   const text = input.value.trim();
   if (!text || !activeConn) return;
 
-  const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random()*1000);
-  activeConn.send({ type: 'chat', text, msgId });
-  appendMessageUI(msgId, 'sent', text);
+  const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+  const timestamp = Date.now();
+  activeConn.send({ type: 'chat', text, msgId, timestamp });
+  appendMessageUI(msgId, 'sent', text, null, null, timestamp);
   saveMessageLocally(msgId, activeConn.peer, myId, text);
   input.value = '';
 };
@@ -214,15 +234,17 @@ document.getElementById('file-input').onchange = (e) => {
   const reader = new FileReader();
   reader.onload = () => {
     const fileData = reader.result;
-    const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random()*1000);
-    activeConn.send({ type: 'file', fileData, fileType: file.type, msgId });
-    appendMessageUI(msgId, 'sent', '', fileData, file.type);
+    const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+    const timestamp = Date.now();
+    activeConn.send({ type: 'file', fileData, fileType: file.type, msgId, timestamp });
+    appendMessageUI(msgId, 'sent', '', fileData, file.type, timestamp);
     saveMessageLocally(msgId, activeConn.peer, myId, '', fileData, file.type);
   };
   reader.readAsDataURL(file);
 };
 
-function appendMessageUI(msgId, type, text, fileData = null, fileType = null) {
+// UI Appending with "Delete for Me" and "Delete for Everyone"
+function appendMessageUI(msgId, type, text, fileData = null, fileType = null, timestamp = Date.now()) {
   const container = document.getElementById('messages-container');
   const msgDiv = document.createElement('div');
   msgDiv.className = `msg ${type}`;
@@ -246,23 +268,59 @@ function appendMessageUI(msgId, type, text, fileData = null, fileType = null) {
     }
   }
 
-  // Delete Button
+  const footer = document.createElement('div');
+  footer.className = 'msg-footer';
+
+  const timeSpan = document.createElement('span');
+  timeSpan.className = 'msg-time';
+  const d = new Date(timestamp);
+  timeSpan.textContent = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+  footer.appendChild(timeSpan);
+
   const delBtn = document.createElement('button');
   delBtn.className = 'btn-del-msg';
   delBtn.innerHTML = '🗑️ Delete';
-  delBtn.onclick = () => {
-    if (confirm("Delete this message for everyone?")) {
-      msgDiv.remove();
-      deleteMessageLocally(msgId);
-      if (activeConn) {
-        activeConn.send({ type: 'delete_msg', msgId });
-      }
-    }
-  };
-  msgDiv.appendChild(delBtn);
+  delBtn.onclick = () => showDeleteChoiceModal(msgId, msgDiv);
+  footer.appendChild(delBtn);
 
+  msgDiv.appendChild(footer);
   container.appendChild(msgDiv);
   container.scrollTop = container.scrollHeight;
+}
+
+// Modal for "Delete for Me" vs "Delete for Everyone"
+function showDeleteChoiceModal(msgId, msgDiv) {
+  const choiceModal = document.createElement('div');
+  choiceModal.className = 'modal';
+  choiceModal.innerHTML = `
+    <div class="delete-dialog">
+      <h4>Delete Message?</h4>
+      <p>Do you want to delete this message only for yourself or for everyone?</p>
+      <div class="delete-actions">
+        <button id="opt-del-everyone" class="btn-del-opt btn-del-for-all">🗑️ Delete for Everyone</button>
+        <button id="opt-del-me" class="btn-del-opt btn-del-for-me">Delete for Me</button>
+        <button id="opt-del-cancel" class="btn-del-opt btn-del-cancel">Cancel</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(choiceModal);
+
+  document.getElementById('opt-del-me').onclick = () => {
+    msgDiv.remove();
+    deleteMessageLocally(msgId);
+    choiceModal.remove();
+  };
+
+  document.getElementById('opt-del-everyone').onclick = () => {
+    msgDiv.remove();
+    deleteMessageLocally(msgId);
+    if (activeConn) {
+      activeConn.send({ type: 'delete_msg_everyone', msgId });
+    }
+    choiceModal.remove();
+  };
+
+  document.getElementById('opt-del-cancel').onclick = () => choiceModal.remove();
 }
 
 // --- 8. CALL & RINGTONE ---
@@ -311,8 +369,10 @@ document.getElementById('btn-end-call').onclick = () => {
 function closeCallModal() {
   stopRingtone();
   document.getElementById('call-modal').classList.add('hidden');
-  document.getElementById('remote-screen-video').classList.add('hidden');
-  document.getElementById('remote-screen-video').srcObject = null;
+  const videoWrapper = document.getElementById('screen-wrapper');
+  if (videoWrapper) videoWrapper.classList.add('hidden');
+  const video = document.getElementById('remote-screen-video');
+  video.srcObject = null;
   if (activeMediaCall) activeMediaCall.close();
 }
 
@@ -320,7 +380,7 @@ document.getElementById('my-live-input').oninput = (e) => {
   if (activeConn) activeConn.send({ type: 'live_typing', text: e.target.value });
 };
 
-// --- 9. SCREEN SHARE WITH RING ---
+// --- 9. BIG SCREEN SHARE & FULLSCREEN TOGGLE ---
 document.getElementById('btn-screen-share').onclick = async () => {
   if (!activeConn) return;
   try {
@@ -335,17 +395,28 @@ document.getElementById('btn-screen-share').onclick = async () => {
 
 peer.on('call', (call) => {
   activeMediaCall = call;
-  playMsgSound();
+  playLoudChime();
   sendDesktopNotification("Screen Share", "Friend started sharing screen");
   call.answer();
   call.on('stream', (remoteStream) => {
     const video = document.getElementById('remote-screen-video');
     video.srcObject = remoteStream;
-    video.classList.remove('hidden');
+    const videoWrapper = document.getElementById('screen-wrapper');
+    if (videoWrapper) videoWrapper.classList.remove('hidden');
     document.getElementById('call-modal').classList.remove('hidden');
     document.getElementById('call-status-title').textContent = "Viewing Remote Screen";
   });
 });
+
+// Fullscreen toggle for screen share
+function toggleVideoFullscreen() {
+  const video = document.getElementById('remote-screen-video');
+  if (!document.fullscreenElement) {
+    video.requestFullscreen().catch(err => alert("Fullscreen error: " + err.message));
+  } else {
+    document.exitFullscreen();
+  }
+}
 
 // --- 10. ADMIN CONTACTS MANAGEMENT ---
 document.getElementById('btn-add-contact').onclick = () => {
