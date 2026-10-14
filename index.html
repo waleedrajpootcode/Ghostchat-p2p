@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GhostChat Private</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+  <!-- Anti-Screenshot Privacy Shield -->
+  <div id="privacy-shield" class="hidden">
+    <h2>⚠️ Content Hidden for Privacy</h2>
+  </div>
+
+  <div class="app-container">
+    
+    <!-- LEFT SIDEBAR (Sirf Admin ko dikhegi ya PIN se unlock hogi) -->
+    <aside class="sidebar" id="sidebar">
+      <div class="my-profile">
+        <div class="brand-row">
+          <h3>Ghost<span class="highlight">Chat</span></h3>
+          <button id="btn-admin-toggle" class="btn-pin">🔒 Admin</button>
+        </div>
+        <p class="my-id-box">My ID: <strong id="my-peer-id">Generating...</strong> 
+          <button id="btn-copy-id" class="btn-copy">📋 Copy</button>
+        </p>
+      </div>
+
+      <!-- Yeh section sirf Admin PIN 2007 lagane par show hoga -->
+      <div id="admin-controls" class="hidden">
+        <div class="admin-badge">⚡ Admin Mode Activated</div>
+        <div class="add-contact">
+          <input type="text" id="target-contact-name" placeholder="Contact Name (e.g. Ali)">
+          <input type="text" id="target-peer-id" placeholder="Friend's Peer ID...">
+          <button id="btn-add-contact">+ Add Friend</button>
+        </div>
+
+        <div class="contacts-header">My Private Contacts</div>
+        <ul id="contacts-list" class="contacts-list">
+          <!-- Sirf Admin ke contacts yahan load honge -->
+        </ul>
+      </div>
+
+      <!-- Guest mode message jab PIN na laga ho -->
+      <div id="guest-message" class="guest-panel">
+        <p>🔒 End-to-End Encrypted Private Terminal</p>
+        <small>Waiting for Admin to start conversation...</small>
+      </div>
+    </aside>
+
+    <!-- RIGHT MAIN: Chat Window -->
+    <main class="chat-area">
+      <div class="chat-header">
+        <div>
+          <h3 id="current-contact-name">Ghost Terminal</h3>
+          <span id="connection-status" class="status-offline">● Disconnected</span>
+        </div>
+        <div class="header-actions">
+          <button id="btn-start-call" class="btn-action" disabled>📞 Live Call</button>
+          <button id="btn-screen-share" class="btn-action" disabled>🖥️ Share Screen</button>
+        </div>
+      </div>
+
+      <!-- Messages Display -->
+      <div id="messages-container" class="messages-container">
+        <div class="empty-state">Waiting for secure connection...</div>
+      </div>
+
+      <!-- Chat Input Area -->
+      <form id="chat-form" class="chat-input-bar">
+        <label for="file-input" class="btn-file">📎</label>
+        <input type="file" id="file-input" accept="image/*,video/*" style="display:none;">
+        
+        <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" disabled>
+        <button type="submit" id="btn-send" disabled>Send</button>
+      </form>
+    </main>
+
+  </div>
+
+  <!-- CALL & SCREEN SHARE MODAL -->
+  <div id="call-modal" class="modal hidden">
+    <div class="modal-content">
+      <h3 id="call-status-title">Incoming Call...</h3>
+      
+      <video id="remote-screen-video" autoplay playsinline class="hidden"></video>
+      
+      <div class="live-call-box">
+        <h4>Live Real-time Call:</h4>
+        <div id="remote-live-text" class="live-text-stream">Waiting for typing...</div>
+        <input type="text" id="my-live-input" placeholder="Type here live...">
+      </div>
+
+      <div class="modal-buttons">
+        <button id="btn-accept-call" class="btn-call-accept">Accept</button>
+        <button id="btn-end-call" class="btn-call-decline">End Call</button>
+      </div>
+    </div>
+  </div>
+
+  <audio id="ringtone" src="ringtone.mp3" loop preload="auto"></audio>
+
+  <script src="app.js"></script>
+</body>
+</html>
