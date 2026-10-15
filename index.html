@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>GhostNode - P2P Adaptive Studio</title>
+  <title>GhostNode - Enterprise P2P Studio</title>
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.json">
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -20,12 +20,12 @@
     <aside class="sidebar" id="sidebar">
       <div class="my-profile">
         <div class="brand-row">
-          <h3>Ghost<span class="highlight">Node</span> <small class="saas-badge">Mesh v3.5</small></h3>
+          <h3>Ghost<span class="highlight">Node</span> <small class="saas-badge">v4.0 Enterprise</small></h3>
           <button id="btn-admin-toggle" class="btn-pin">🔒 Admin</button>
         </div>
         
         <div class="my-id-box">
-          <span>ID: <strong id="my-peer-id">Booting...</strong></span>
+          <span>My Node ID: <strong id="my-peer-id">Booting...</strong></span>
           <button id="btn-copy-id" class="btn-copy" title="Copy ID">📋</button>
         </div>
 
@@ -38,23 +38,23 @@
         </div>
       </div>
 
-      <!-- Admin Terminal -->
+      <!-- Admin Panel -->
       <div id="admin-controls" class="hidden">
         <div class="admin-badge">⚡ Orchestrator Terminal</div>
         <div class="add-contact">
-          <input type="text" id="target-contact-name" placeholder="Contact Label (e.g. Ali)">
-          <input type="text" id="target-peer-id" placeholder="Node ID (e.g. ali_phone)">
-          <button id="btn-add-contact">+ Add to Mesh</button>
+          <input type="text" id="target-contact-name" placeholder="Friend Label (e.g. Ali)">
+          <input type="text" id="target-peer-id" placeholder="Friend Node ID (e.g. node_1234)">
+          <button id="btn-add-contact">+ Add Node</button>
         </div>
 
-        <div class="contacts-header">Mesh Nodes (Auto-Tracking)</div>
+        <div class="contacts-header">Saved Nodes (Auto-Tracking)</div>
         <ul id="contacts-list" class="contacts-list"></ul>
       </div>
 
       <!-- Guest Mode -->
       <div id="guest-message" class="guest-panel">
-        <div class="e2ee-badge">🔒 Heterogeneous Mesh Active</div>
-        <p>Adaptive Audio/Video/Text Tunnel. Zero Central Server.</p>
+        <div class="e2ee-badge">🔒 Direct Mesh Active</div>
+        <p>100% P2P Serverless Tunnel. No middle server stores your media or text.</p>
         <div class="auto-pulse-box">
           <span class="pulse-dot"></span>
           <small id="guest-status-text">Scanning for Admin Nodes...</small>
@@ -67,7 +67,7 @@
       <header class="chat-header">
         <div class="header-info">
           <div class="title-row">
-            <h3 id="current-contact-name">Studio Channel</h3>
+            <h3 id="current-contact-name">Direct P2P Channel</h3>
             <span id="latency-badge" class="latency-badge hidden">⚡ -- ms</span>
             <span id="e2ee-fingerprint" class="e2ee-hash-badge hidden">🔒 E2EE: Ready</span>
           </div>
@@ -77,13 +77,13 @@
         <div class="header-actions">
           <button id="btn-start-call" class="btn-action" disabled>📞 Call</button>
           <button id="btn-group-call" class="btn-action btn-group-action hidden">👥 Group Call</button>
-          <button id="btn-screen-share" class="btn-action" disabled>🖥️ Share + Audio</button>
+          <button id="btn-screen-share" class="btn-action" disabled>🖥️ Share Screen</button>
         </div>
       </header>
 
       <!-- Messages View -->
       <div id="messages-container" class="messages-container">
-        <div class="empty-state">Secure P2P Mesh ready. Nodes auto-negotiate when online.</div>
+        <div class="empty-state">Mesh link idle. Open this web app on both devices to auto-connect!</div>
       </div>
 
       <!-- Live Typing Bar -->
@@ -92,7 +92,7 @@
         <span id="typing-user-text">Peer is typing...</span>
       </div>
 
-      <!-- EXPANDED EMOJI PANEL -->
+      <!-- EMOJI PICKER -->
       <div id="emoji-picker-panel" class="emoji-picker-panel hidden">
         <div class="emoji-tabs">
           <span class="tab active" data-cat="smileys">Smileys</span>
@@ -108,7 +108,7 @@
         <label for="file-input" class="btn-file" title="Send Media">📎</label>
         <input type="file" id="file-input" accept="image/*,video/*,audio/*" style="display:none;">
         
-        <button type="button" id="btn-toggle-emoji" class="btn-emoji-toggle" title="Open Emojis">😊</button>
+        <button type="button" id="btn-toggle-emoji" class="btn-emoji-toggle" title="Emojis">😊</button>
         <button type="button" id="btn-voice-memo" class="btn-voice-note" title="Record Voice Note">🎙️</button>
 
         <input type="text" id="message-input" placeholder="Type message or ```code```..." autocomplete="off" disabled>
@@ -118,14 +118,14 @@
 
   </div>
 
-  <!-- ADAPTIVE STUDIO & CALL MODAL (Mobile + PC Unified) -->
+  <!-- CALL & SCREEN SHARE MODAL (Universal Adaptive) -->
   <div id="call-modal" class="modal hidden">
     <div class="modal-content studio-modal">
       
       <div class="studio-header">
         <div class="studio-title-group">
-          <h3 id="call-status-title">Adaptive P2P Call</h3>
-          <span id="studio-media-status" class="media-status-pill">Detecting Devices...</span>
+          <h3 id="call-status-title">Live Call Active</h3>
+          <span id="studio-media-status" class="media-status-pill">Negotiating Tracks...</span>
           <span id="group-participants-count" class="group-count-pill hidden">👥 1 in Session</span>
         </div>
         <div class="studio-header-controls">
@@ -135,14 +135,14 @@
       
       <div class="studio-body">
         
-        <!-- Video Grid Area -->
+        <!-- Video Stream View -->
         <div class="studio-stream-area">
           <div id="video-grid" class="video-grid">
             <div id="remote-card-main" class="video-card">
               <video id="remote-stream-video" autoplay playsinline webkit-playsinline></video>
-              <span class="video-label" id="remote-stream-label">Remote Node (Audio/Video)</span>
-              <!-- Fallback Audio element to guarantee sound on PC & Mobile -->
-              <audio id="remote-audio-player" autoplay></audio>
+              <span class="video-label" id="remote-stream-label">Remote Stream (Video + Audio)</span>
+              <!-- Backup audio element for 100% sound delivery -->
+              <audio id="remote-audio-player" autoplay playsinline></audio>
             </div>
             
             <div id="local-preview-card" class="video-card hidden">
@@ -162,24 +162,24 @@
 
         <!-- In-Call Real-Time Chat Drawer -->
         <div class="studio-chat-drawer">
-          <div class="drawer-header">Studio Live Keystroke Feed</div>
+          <div class="drawer-header">Live In-Call Keystrokes & Chat</div>
           <div id="in-call-messages" class="studio-messages-log"></div>
           
           <div class="live-keystroke-box">
-            <small>Peer Live Keystroke (No-Mic Sync):</small>
+            <small>Peer Live Typing Stream:</small>
             <div id="remote-live-text" class="live-stream-text">Listening...</div>
           </div>
           
           <div class="studio-input-row">
-            <input type="text" id="my-live-input" placeholder="Type live keystroke...">
+            <input type="text" id="my-live-input" placeholder="Type live keystroke to peer...">
           </div>
         </div>
 
       </div>
 
       <div class="studio-footer">
-        <button id="btn-accept-call" class="btn-call-accept">Accept Session</button>
-        <button id="btn-end-call" class="btn-call-decline">Terminate Link</button>
+        <button id="btn-accept-call" class="btn-call-accept">Accept Call</button>
+        <button id="btn-end-call" class="btn-call-decline">End Call</button>
       </div>
 
     </div>
