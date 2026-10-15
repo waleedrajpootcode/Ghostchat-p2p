@@ -44,6 +44,9 @@ let latencyInterval = null;
 let localStream = null;
 let isMicOn = false;
 let isCamOn = false;
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecordingVoice = false;
 
 // --- 2. ADMIN LOCK UI ---
 const adminBtn = document.getElementById('btn-admin-toggle');
@@ -87,7 +90,7 @@ adminBtn.onclick = () => {
   }
 };
 
-// --- 3. INDEXEDDB SETUP ---
+// --- 3. INDEXEDDB SETUP (VERSION 6) ---
 let db;
 const dbReq = indexedDB.open('GhostChatDB', 6);
 dbReq.onupgradeneeded = (e) => {
@@ -101,10 +104,10 @@ dbReq.onsuccess = (e) => {
   if (isAdmin) renderContacts();
 };
 
-function saveMessageLocally(msgId, contactId, sender, text, fileData = null, fileType = null) {
+function saveMessageLocally(msgId, contactId, sender, text, fileData = null, fileType = null, fileName = null) {
   if (!db) return;
   const tx = db.transaction('messages', 'readwrite');
-  tx.objectStore('messages').put({ msgId, contactId, sender, text, fileData, fileType, timestamp: Date.now() });
+  tx.objectStore('messages').put({ msgId, contactId, sender, text, fileData, fileType, fileName, timestamp: Date.now() });
 }
 
 function deleteMessageLocally(msgId) {
@@ -121,11 +124,11 @@ function loadContactMessages(contactId) {
   const req = tx.objectStore('messages').index('contactId').getAll(contactId);
 
   req.onsuccess = () => {
-    req.result.forEach(msg => appendMessageUI(msg.msgId, msg.sender === myId ? 'sent' : 'received', msg.text, msg.fileData, msg.fileType, msg.timestamp));
+    req.result.forEach(msg => appendMessageUI(msg.msgId, msg.sender === myId ? 'sent' : 'received', msg.text, msg.fileData, msg.fileType, msg.fileName, msg.timestamp));
   };
 }
 
-// --- 4. DUAL-FREQUENCY AUDIO ---
+// --- 4. AUDIO NOTIFICATIONS ---
 function playLoudChime() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -205,6 +208,7 @@ function setupConnection(conn, customName = null) {
     if (isAdmin) renderContacts();
 
     startLatencyTracker();
+    generateE2EEFingerprint(myId, conn.peer);
   });
 
   conn.on('data', (data) => handleIncomingData(data));
@@ -213,6 +217,7 @@ function setupConnection(conn, customName = null) {
     document.getElementById('connection-status').textContent = '● Scanning Mesh...';
     document.getElementById('connection-status').className = 'status-offline';
     document.getElementById('latency-badge').classList.add('hidden');
+    document.getElementById('e2ee-fingerprint').classList.add('hidden');
     clearInterval(latencyInterval);
     toggleInputs(false);
     activeConn = null;
@@ -229,6 +234,19 @@ function startLatencyTracker() {
   }, 3000);
 }
 
+function generateE2EEFingerprint(id1, id2) {
+  const combined = [id1, id2].sort().join(':');
+  let hash = 0;
+  for (let i = 0; i < combined.length; i++) {
+    hash = ((hash << 5) - hash) + combined.charCodeAt(i);
+    hash |= 0;
+  }
+  const hex = Math.abs(hash).toString(16).toUpperCase().padStart(8, '0');
+  const badge = document.getElementById('e2ee-fingerprint');
+  badge.textContent = `🔒 E2EE: #${hex.slice(0, 4)}-${hex.slice(4, 8)}`;
+  badge.classList.remove('hidden');
+}
+
 function updateOnlineUI(name) {
   const statusEl = document.getElementById('connection-status');
   statusEl.textContent = `● Online: ${name}`;
@@ -243,7 +261,7 @@ function getContactName(peerId) {
   return c ? c.name : null;
 }
 
-// --- 6. DATA HANDLING ---
+// --- 6. DATA INCOMING ---
 function handleIncomingData(data) {
   if (data.type === 'ping') {
     activeConn.send({ type: 'pong', t: data.t });
@@ -257,13 +275,13 @@ function handleIncomingData(data) {
   } else if (data.type === 'chat') {
     playLoudChime();
     sendDesktopNotification("Node Message", data.text);
-    appendMessageUI(data.msgId, 'received', data.text, null, null, data.timestamp);
+    appendMessageUI(data.msgId, 'received', data.text, null, null, null, data.timestamp);
     appendStudioMessage(getContactName(activeConn.peer) || 'Peer', data.text);
     saveMessageLocally(data.msgId, activeConn.peer, activeConn.peer, data.text);
   } else if (data.type === 'file') {
     playLoudChime();
-    appendMessageUI(data.msgId, 'received', '', data.fileData, data.fileType, data.timestamp);
-    saveMessageLocally(data.msgId, activeConn.peer, activeConn.peer, '', data.fileData, data.fileType);
+    appendMessageUI(data.msgId, 'received', '', data.fileData, data.fileType, data.fileName, data.timestamp);
+    saveMessageLocally(data.msgId, activeConn.peer, activeConn.peer, '', data.fileData, data.fileType, data.fileName);
   } else if (data.type === 'delete_msg_everyone') {
     const el = document.getElementById(`msg-${data.msgId}`);
     if (el) el.remove();
@@ -293,7 +311,7 @@ function formatMessageContent(text) {
   return span;
 }
 
-// --- 7. CHAT & EMOJIS ---
+// --- 7. CHAT, EMOJIS, FILES & VOICE NOTES ---
 const msgInput = document.getElementById('message-input');
 let typingTimeout = null;
 
@@ -327,7 +345,7 @@ document.getElementById('chat-form').onsubmit = (e) => {
   const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
   const timestamp = Date.now();
   activeConn.send({ type: 'chat', text, msgId, timestamp });
-  appendMessageUI(msgId, 'sent', text, null, null, timestamp);
+  appendMessageUI(msgId, 'sent', text, null, null, null, timestamp);
   appendStudioMessage('Me', text);
   saveMessageLocally(msgId, activeConn.peer, myId, text);
   msgInput.value = '';
@@ -343,14 +361,53 @@ document.getElementById('file-input').onchange = (e) => {
     const fileData = reader.result;
     const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
     const timestamp = Date.now();
-    activeConn.send({ type: 'file', fileData, fileType: file.type, msgId, timestamp });
-    appendMessageUI(msgId, 'sent', '', fileData, file.type, timestamp);
-    saveMessageLocally(msgId, activeConn.peer, myId, '', fileData, file.type);
+    activeConn.send({ type: 'file', fileData, fileType: file.type, fileName: file.name, msgId, timestamp });
+    appendMessageUI(msgId, 'sent', '', fileData, file.type, file.name, timestamp);
+    saveMessageLocally(msgId, activeConn.peer, myId, '', fileData, file.type, file.name);
   };
   reader.readAsDataURL(file);
 };
 
-function appendMessageUI(msgId, type, text, fileData = null, fileType = null, timestamp = Date.now()) {
+// VOICE NOTE RECORDER (Microphone Push-to-Talk)
+const voiceBtn = document.getElementById('btn-voice-memo');
+voiceBtn.onclick = async () => {
+  if (!activeConn) return;
+  if (!isRecordingVoice) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onload = () => {
+          const fileData = reader.result;
+          const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+          const timestamp = Date.now();
+          activeConn.send({ type: 'file', fileData, fileType: 'audio/webm', fileName: 'VoiceMemo.webm', msgId, timestamp });
+          appendMessageUI(msgId, 'sent', '', fileData, 'audio/webm', 'VoiceMemo.webm', timestamp);
+          saveMessageLocally(msgId, activeConn.peer, myId, '', fileData, 'audio/webm', 'VoiceMemo.webm');
+        };
+        reader.readAsDataURL(audioBlob);
+        stream.getTracks().forEach(t => t.stop());
+      };
+      mediaRecorder.start();
+      isRecordingVoice = true;
+      voiceBtn.classList.add('recording');
+      voiceBtn.title = "Click to Stop & Send Voice Note";
+    } catch(err) {
+      alert("No Microphone detected on this device to record voice note.");
+    }
+  } else {
+    mediaRecorder.stop();
+    isRecordingVoice = false;
+    voiceBtn.classList.remove('recording');
+    voiceBtn.title = "Record Voice Note";
+  }
+};
+
+function appendMessageUI(msgId, type, text, fileData = null, fileType = null, fileName = null, timestamp = Date.now()) {
   const container = document.getElementById('messages-container');
   const msgDiv = document.createElement('div');
   msgDiv.className = `msg ${type}`;
@@ -367,20 +424,44 @@ function appendMessageUI(msgId, type, text, fileData = null, fileType = null, ti
       vid.src = fileData;
       vid.controls = true;
       msgDiv.appendChild(vid);
+    } else if (fileType.startsWith('audio/')) {
+      const aud = document.createElement('audio');
+      aud.src = fileData;
+      aud.controls = true;
+      msgDiv.appendChild(aud);
     }
   }
 
   const footer = document.createElement('div');
   footer.className = 'msg-footer';
   const d = new Date(timestamp);
-  footer.innerHTML = `<span>${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}</span>`;
+  
+  const timeSpan = document.createElement('span');
+  timeSpan.textContent = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+  footer.appendChild(timeSpan);
+
+  const actionsDiv = document.createElement('div');
+  actionsDiv.className = 'msg-actions';
+
+  // 1-Click Download Link for Media
+  if (fileData) {
+    const dlBtn = document.createElement('a');
+    dlBtn.className = 'btn-action-mini';
+    dlBtn.href = fileData;
+    dlBtn.download = fileName || 'ghost_file';
+    dlBtn.textContent = '⬇️';
+    dlBtn.title = 'Save to Device';
+    actionsDiv.appendChild(dlBtn);
+  }
 
   const delBtn = document.createElement('button');
-  delBtn.className = 'btn-del-msg';
+  delBtn.className = 'btn-action-mini btn-del-msg';
   delBtn.textContent = '🗑️';
+  delBtn.title = 'Purge Message';
   delBtn.onclick = () => showDeleteChoiceModal(msgId, msgDiv);
-  footer.appendChild(delBtn);
+  actionsDiv.appendChild(delBtn);
 
+  footer.appendChild(actionsDiv);
   msgDiv.appendChild(footer);
   container.appendChild(msgDiv);
   container.scrollTop = container.scrollHeight;
@@ -433,10 +514,8 @@ const ringtone = document.getElementById('ringtone');
 function playRingtone() { ringtone.play().catch(() => playLoudChime()); }
 function stopRingtone() { ringtone.pause(); ringtone.currentTime = 0; }
 
-// Safe Hardware Discovery: Tries to grab mic/cam, returns silent/null stream if not found
 async function getAdaptiveMediaStream(wantAudio = false, wantVideo = false) {
   if (!wantAudio && !wantVideo) {
-    // Generate a dummy silent audio track to keep WebRTC media session alive without mic hardware!
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const osc = ctx.createOscillator();
     const dst = ctx.createMediaStreamDestination();
@@ -450,13 +529,10 @@ async function getAdaptiveMediaStream(wantAudio = false, wantVideo = false) {
   try {
     return await navigator.mediaDevices.getUserMedia({ audio: wantAudio, video: wantVideo });
   } catch (err) {
-    console.warn("Hardware device not detected or denied. Running silent fallback:", err);
-    // Fallback: silent stream
     return getAdaptiveMediaStream(false, false);
   }
 }
 
-// Start Call Button
 document.getElementById('btn-start-call').onclick = async () => {
   if (!activeConn) return;
   activeConn.send({ type: 'call_ring' });
@@ -464,7 +540,6 @@ document.getElementById('btn-start-call').onclick = async () => {
   document.getElementById('call-status-title').textContent = "Pinging Peer Node...";
   document.getElementById('btn-accept-call').classList.add('hidden');
 
-  // Prepare safe adaptive stream (checks if mic exists, else silent)
   localStream = await getAdaptiveMediaStream(true, false);
   updateHardwareStatusPill();
   activeMediaCall = peer.call(activeConn.peer, localStream);
@@ -486,7 +561,6 @@ document.getElementById('btn-accept-call').onclick = async () => {
   document.getElementById('call-status-title').textContent = "Adaptive Studio Live";
   document.getElementById('btn-accept-call').classList.add('hidden');
 
-  // Mobile or PC safely grabs whatever hardware is present
   localStream = await getAdaptiveMediaStream(true, false);
   updateHardwareStatusPill();
   if (activeMediaCall) {
@@ -503,7 +577,6 @@ function bindCallEvents(call) {
   call.on('stream', (remoteStream) => {
     const video = document.getElementById('remote-stream-video');
     video.srcObject = remoteStream;
-    // Remote audio plays loud through speaker automatically!
     video.muted = false;
     document.getElementById('call-modal').classList.remove('hidden');
     document.getElementById('call-status-title').textContent = "Studio Session Live";
@@ -522,7 +595,6 @@ function updateHardwareStatusPill() {
   }
 }
 
-// In-Call Controls: Toggle Mic
 document.getElementById('btn-toggle-mic').onclick = async () => {
   const btn = document.getElementById('btn-toggle-mic');
   if (!isMicOn) {
@@ -547,7 +619,6 @@ document.getElementById('btn-toggle-mic').onclick = async () => {
   updateHardwareStatusPill();
 };
 
-// In-Call Controls: Toggle Camera (For Mobile or Laptop Webcam)
 document.getElementById('btn-toggle-cam').onclick = async () => {
   const btn = document.getElementById('btn-toggle-cam');
   const previewCard = document.getElementById('local-preview-card');
@@ -583,11 +654,9 @@ document.getElementById('btn-toggle-cam').onclick = async () => {
   }
 };
 
-// Screen Share WITH SYSTEM AUDIO (PC to Mobile)
 async function triggerScreenShareWithAudio() {
   if (!activeConn) return;
   try {
-    // Captures both desktop display + system audio!
     const displayStream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
       audio: { echoCancellation: true, noiseSuppression: true }

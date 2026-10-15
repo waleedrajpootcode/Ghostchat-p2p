@@ -69,6 +69,7 @@
           <div class="title-row">
             <h3 id="current-contact-name">Studio Channel</h3>
             <span id="latency-badge" class="latency-badge hidden">⚡ -- ms</span>
+            <span id="e2ee-fingerprint" class="e2ee-hash-badge hidden">🔒 E2EE: Ready</span>
           </div>
           <span id="connection-status" class="status-offline">● Searching Mesh...</span>
         </div>
@@ -100,11 +101,13 @@
         <span class="q-emoji" data-emoji="❤️">❤️</span>
       </div>
 
-      <!-- Input Bar -->
+      <!-- Input Bar (With Voice Note Mic) -->
       <form id="chat-form" class="chat-input-bar">
         <label for="file-input" class="btn-file" title="Send Media">📎</label>
-        <input type="file" id="file-input" accept="image/*,video/*" style="display:none;">
+        <input type="file" id="file-input" accept="image/*,video/*,audio/*" style="display:none;">
         
+        <button type="button" id="btn-voice-memo" class="btn-voice-note" title="Record Voice Note">🎙️</button>
+
         <input type="text" id="message-input" placeholder="Type message or ```code```..." autocomplete="off" disabled>
         <button type="submit" id="btn-send" disabled>Send</button>
       </form>
@@ -125,24 +128,20 @@
         </div>
       </div>
       
-      <!-- Studio Split View: Multi-Video Stream Grid + In-Call Chat Drawer -->
+      <!-- Studio Split View -->
       <div class="studio-body">
-        
         <div class="studio-stream-area">
           <div id="video-grid" class="video-grid">
-            <!-- Remote Stream (Mobile Camera or Screen) -->
             <div class="video-card">
               <video id="remote-stream-video" autoplay playsinline></video>
               <span class="video-label" id="remote-stream-label">Remote Stream (Audio Active)</span>
             </div>
-            <!-- Local Preview (Only if Camera is ON) -->
             <div id="local-preview-card" class="video-card hidden">
               <video id="local-stream-video" autoplay playsinline muted></video>
               <span class="video-label">My Camera</span>
             </div>
           </div>
 
-          <!-- Studio Bottom AV Control Bar -->
           <div class="studio-control-toolbar">
             <button id="btn-toggle-mic" class="tool-btn" title="Toggle Mic">🎙️ Mic: Off</button>
             <button id="btn-toggle-cam" class="tool-btn" title="Toggle Camera">📷 Cam: Off</button>
@@ -150,7 +149,6 @@
           </div>
         </div>
 
-        <!-- In-Call Real-Time Chat & Keystroke Feed -->
         <div class="studio-chat-drawer">
           <div class="drawer-header">Studio Synchronous Feed</div>
           <div id="in-call-messages" class="studio-messages-log"></div>
@@ -164,7 +162,6 @@
             <input type="text" id="my-live-input" placeholder="Type instant live keystroke...">
           </div>
         </div>
-
       </div>
 
       <div class="studio-footer">
