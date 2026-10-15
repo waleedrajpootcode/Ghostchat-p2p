@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>GhostNode - P2P Adaptive Studio & Group Mesh</title>
+  <title>GhostNode - P2P Adaptive Studio</title>
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.json">
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -20,7 +20,7 @@
     <aside class="sidebar" id="sidebar">
       <div class="my-profile">
         <div class="brand-row">
-          <h3>Ghost<span class="highlight">Node</span> <small class="saas-badge">Mesh v3.0</small></h3>
+          <h3>Ghost<span class="highlight">Node</span> <small class="saas-badge">Mesh v3.5</small></h3>
           <button id="btn-admin-toggle" class="btn-pin">🔒 Admin</button>
         </div>
         
@@ -98,7 +98,7 @@
           <span class="tab active" data-cat="smileys">Smileys</span>
           <span class="tab" data-cat="gestures">Gestures</span>
           <span class="tab" data-cat="hearts">Hearts & Fire</span>
-          <span class="tab" data-cat="tech">Tech & Objects</span>
+          <span class="tab" data-cat="tech">Tech</span>
         </div>
         <div id="emoji-grid-content" class="emoji-grid-content"></div>
       </div>
@@ -118,57 +118,70 @@
 
   </div>
 
-  <!-- ADAPTIVE STUDIO & GROUP CALL MODAL -->
+  <!-- ADAPTIVE STUDIO & CALL MODAL (Mobile + PC Unified) -->
   <div id="call-modal" class="modal hidden">
     <div class="modal-content studio-modal">
+      
       <div class="studio-header">
         <div class="studio-title-group">
-          <h3 id="call-status-title">Adaptive P2P Studio</h3>
-          <span id="studio-media-status" class="media-status-pill">Detecting Hardware...</span>
-          <span id="group-participants-count" class="group-count-pill hidden">👥 1 in Call</span>
+          <h3 id="call-status-title">Adaptive P2P Call</h3>
+          <span id="studio-media-status" class="media-status-pill">Detecting Devices...</span>
+          <span id="group-participants-count" class="group-count-pill hidden">👥 1 in Session</span>
         </div>
         <div class="studio-header-controls">
           <button id="btn-toggle-pip" class="btn-action">⛶ Fullscreen</button>
         </div>
       </div>
       
-      <!-- Studio Split View: Multi-Peer Grid + In-Call Chat Drawer -->
       <div class="studio-body">
+        
+        <!-- Video Grid Area -->
         <div class="studio-stream-area">
           <div id="video-grid" class="video-grid">
-            <!-- Dynamic Video Cards for Group Mesh -->
-            <div id="local-preview-card" class="video-card">
+            <div id="remote-card-main" class="video-card">
+              <video id="remote-stream-video" autoplay playsinline webkit-playsinline></video>
+              <span class="video-label" id="remote-stream-label">Remote Node (Audio/Video)</span>
+              <!-- Fallback Audio element to guarantee sound on PC & Mobile -->
+              <audio id="remote-audio-player" autoplay></audio>
+            </div>
+            
+            <div id="local-preview-card" class="video-card hidden">
               <video id="local-stream-video" autoplay playsinline muted></video>
-              <span class="video-label">My Stream (Local)</span>
+              <span class="video-label">My Camera</span>
             </div>
           </div>
 
+          <!-- Bottom AV Controls -->
           <div class="studio-control-toolbar">
             <button id="btn-toggle-mic" class="tool-btn" title="Toggle Mic">🎙️ Mic: Off</button>
             <button id="btn-toggle-cam" class="tool-btn" title="Toggle Camera">📷 Cam: Off</button>
-            <button id="btn-screen-in-call" class="tool-btn" title="Share Screen + Sound">🖥️ Screen + Audio</button>
+            <button id="btn-screen-in-call" class="tool-btn" title="Share Screen + Sound">🖥️ Screen</button>
+            <button id="btn-unmute-audio" class="tool-btn hidden" style="background:#58a6ff; color:#0d1117;">🔊 Tap to Enable Audio</button>
           </div>
         </div>
 
+        <!-- In-Call Real-Time Chat Drawer -->
         <div class="studio-chat-drawer">
-          <div class="drawer-header">Studio Synchronous Feed</div>
+          <div class="drawer-header">Studio Live Keystroke Feed</div>
           <div id="in-call-messages" class="studio-messages-log"></div>
           
           <div class="live-keystroke-box">
-            <small>Peer Keystroke Monitor (No-Mic Sync):</small>
+            <small>Peer Live Keystroke (No-Mic Sync):</small>
             <div id="remote-live-text" class="live-stream-text">Listening...</div>
           </div>
           
           <div class="studio-input-row">
-            <input type="text" id="my-live-input" placeholder="Type instant live keystroke...">
+            <input type="text" id="my-live-input" placeholder="Type live keystroke...">
           </div>
         </div>
+
       </div>
 
       <div class="studio-footer">
         <button id="btn-accept-call" class="btn-call-accept">Accept Session</button>
         <button id="btn-end-call" class="btn-call-decline">Terminate Link</button>
       </div>
+
     </div>
   </div>
 
