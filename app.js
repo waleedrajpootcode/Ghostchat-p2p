@@ -1,9 +1,34 @@
-// --- 1. CONFIG & ADMIN PIN ---
+// --- 1. CONFIG & IDENTITIES ---
 const ADMIN_PIN = "2007";
 let isAdmin = sessionStorage.getItem('ghost_is_admin') === 'true';
 
-let myId = localStorage.getItem('ghost_my_id') || 'user_' + Math.floor(1000 + Math.random() * 9000);
-localStorage.setItem('ghost_my_id', myId);
+// Admin Device Selection (PC vs Laptop)
+let adminDevice = localStorage.getItem('ghost_admin_device') || 'PC';
+const deviceSelect = document.getElementById('select-device-type');
+if (deviceSelect) {
+  deviceSelect.value = adminDevice;
+  deviceSelect.onchange = (e) => {
+    localStorage.setItem('ghost_admin_device', e.target.value);
+    location.reload(); // Reconnect with new device tag
+  };
+}
+
+// Generate or Fetch Fixed ID
+let myId = localStorage.getItem('ghost_my_id');
+if (!myId) {
+  // If first time, generate a persistent clean ID
+  myId = isAdmin 
+    ? (adminDevice === 'PC' ? 'admin_pc' : 'admin_laptop')
+    : 'user_' + Math.floor(1000 + Math.random() * 9000);
+  localStorage.setItem('ghost_my_id', myId);
+}
+
+// If admin, ensure ID matches device
+if (isAdmin) {
+  myId = adminDevice === 'PC' ? 'admin_pc' : 'admin_laptop';
+  localStorage.setItem('ghost_my_id', myId);
+}
+
 document.getElementById('my-peer-id').textContent = myId;
 
 if ("Notification" in window && Notification.permission !== "granted") {
@@ -15,26 +40,30 @@ document.getElementById('btn-copy-id').onclick = () => {
   alert("Your ID Copied: " + myId);
 };
 
+// PeerJS Initialization
 const peer = new Peer(myId);
 let activeConn = null;
 let currentContactPeerId = null;
 let activeMediaCall = null;
 let contacts = JSON.parse(localStorage.getItem('ghost_admin_contacts') || '[]');
 
-// --- 2. ADMIN LOCK LOGIC ---
+// --- 2. ADMIN LOCK UI ---
 const adminBtn = document.getElementById('btn-admin-toggle');
 const adminControls = document.getElementById('admin-controls');
 const guestMessage = document.getElementById('guest-message');
+const deviceBox = document.getElementById('device-selector-box');
 
 function updateAdminUI() {
   if (isAdmin) {
     adminControls.classList.remove('hidden');
     guestMessage.classList.add('hidden');
+    deviceBox.classList.remove('hidden');
     adminBtn.textContent = "🔓 Admin Active";
     renderContacts();
   } else {
     adminControls.classList.add('hidden');
     guestMessage.classList.remove('hidden');
+    deviceBox.classList.add('hidden');
     adminBtn.textContent = "🔒 Admin";
   }
 }
@@ -45,25 +74,24 @@ adminBtn.onclick = () => {
     if (confirm("Lock Admin Mode?")) {
       isAdmin = false;
       sessionStorage.removeItem('ghost_is_admin');
-      updateAdminUI();
+      localStorage.removeItem('ghost_my_id');
+      location.reload();
     }
   } else {
     const pin = prompt("Enter Secret Admin PIN:");
     if (pin === ADMIN_PIN) {
       isAdmin = true;
       sessionStorage.setItem('ghost_is_admin', 'true');
-      updateAdminUI();
-      alert("Admin Access Granted! Welcome.");
+      location.reload();
     } else {
       alert("Incorrect PIN! Access Denied.");
     }
   }
 };
 
-// --- 3. INDEXEDDB SETUP (VERSION 4 - FIXED CLEAN STORE) ---
+// --- 3. INDEXEDDB SETUP (VERSION 4) ---
 let db;
 const dbReq = indexedDB.open('GhostChatDB', 4);
-
 dbReq.onupgradeneeded = (e) => {
   db = e.target.result;
   if (db.objectStoreNames.contains('messages')) {
@@ -72,7 +100,6 @@ dbReq.onupgradeneeded = (e) => {
   const store = db.createObjectStore('messages', { keyPath: 'msgId' });
   store.createIndex('contactId', 'contactId', { unique: false });
 };
-
 dbReq.onsuccess = (e) => {
   db = e.target.result;
   if (isAdmin) renderContacts();
@@ -106,16 +133,14 @@ function loadContactMessages(contactId) {
   };
 }
 
-// --- 4. HEAVY / LOUD SOUND CHIME ---
+// --- 4. SOUNDS & NOTIFICATIONS ---
 function playLoudChime() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    
-    // Tone 1: High crisp ding
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
     osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
+    osc1.frequency.setValueAtTime(659.25, ctx.currentTime);
     gain1.gain.setValueAtTime(0.5, ctx.currentTime);
     gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
     osc1.connect(gain1);
@@ -123,12 +148,11 @@ function playLoudChime() {
     osc1.start();
     osc1.stop(ctx.currentTime + 0.35);
 
-    // Tone 2: Rich deeper chime (dong)
     setTimeout(() => {
       const osc2 = ctx.createOscillator();
       const gain2 = ctx.createGain();
       osc2.type = 'triangle';
-      osc2.frequency.setValueAtTime(880, ctx.currentTime); // A5
+      osc2.frequency.setValueAtTime(880, ctx.currentTime);
       gain2.gain.setValueAtTime(0.6, ctx.currentTime);
       gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
       osc2.connect(gain2);
@@ -136,7 +160,6 @@ function playLoudChime() {
       osc2.start();
       osc2.stop(ctx.currentTime + 0.5);
     }, 120);
-
   } catch (e) {}
 }
 
@@ -146,24 +169,56 @@ function sendDesktopNotification(title, body) {
   }
 }
 
-// --- 5. PEERJS CONNECTION ---
+// --- 5. SMART AUTO-CONNECT ENGINE ---
+peer.on('open', (id) => {
+  console.log('Peer Node Ready:', id);
+  startAutoConnectEngine();
+});
+
 peer.on('connection', (conn) => setupConnection(conn));
 
-function connectToPeer(targetId, targetName = null) {
-  if (targetId === myId) return alert("You cannot connect to yourself!");
-  const conn = peer.connect(targetId, { reliable: true });
-  setupConnection(conn, targetName);
+// Yeh function lagataar background mein check karta rahega
+function startAutoConnectEngine() {
+  setInterval(() => {
+    if (activeConn && activeConn.open) return; // Pehle se connected hai to do nothing
+
+    if (isAdmin) {
+      // Admin: Har saved contact se auto-connect try karega
+      contacts.forEach(contact => {
+        if (!activeConn || !activeConn.open) {
+          silentConnect(contact.id, contact.name);
+        }
+      });
+    } else {
+      // Guest/Dost: Admin PC aur Admin Laptop dono ko scan karega
+      const adminTargets = ['admin_pc', 'admin_laptop'];
+      adminTargets.forEach(adminId => {
+        if (!activeConn || !activeConn.open) {
+          silentConnect(adminId, "Admin");
+        }
+      });
+    }
+  }, 2500); // Har 2.5 seconds baad instant auto-scan
+}
+
+function silentConnect(targetId, targetName) {
+  try {
+    const conn = peer.connect(targetId, { reliable: true });
+    setupConnection(conn, targetName);
+  } catch(e) {}
 }
 
 function setupConnection(conn, customName = null) {
-  activeConn = conn;
-  currentContactPeerId = conn.peer;
-
   conn.on('open', () => {
+    activeConn = conn;
+    currentContactPeerId = conn.peer;
+
+    // Handshake: Send identity device info
+    const myDeviceLabel = isAdmin ? `Admin (${adminDevice})` : (localStorage.getItem('ghost_guest_name') || 'Friend');
+    conn.send({ type: 'handshake', deviceLabel: myDeviceLabel });
+
     const displayName = customName || getContactName(conn.peer) || conn.peer;
-    document.getElementById('connection-status').textContent = '● Connected';
-    document.getElementById('connection-status').className = 'status-online';
-    document.getElementById('current-contact-name').textContent = displayName;
+    updateOnlineUI(displayName);
     toggleInputs(true);
     loadContactMessages(conn.peer);
     if (isAdmin) renderContacts();
@@ -172,10 +227,20 @@ function setupConnection(conn, customName = null) {
   conn.on('data', (data) => handleIncomingData(data));
 
   conn.on('close', () => {
-    document.getElementById('connection-status').textContent = '● Disconnected';
+    document.getElementById('connection-status').textContent = '● Auto-Searching...';
     document.getElementById('connection-status').className = 'status-offline';
     toggleInputs(false);
+    activeConn = null;
   });
+}
+
+function updateOnlineUI(name) {
+  const statusEl = document.getElementById('connection-status');
+  statusEl.textContent = `● Online: ${name}`;
+  statusEl.className = 'status-online';
+  document.getElementById('current-contact-name').textContent = name;
+  const guestStatus = document.getElementById('guest-status-text');
+  if (guestStatus) guestStatus.textContent = `Connected with ${name}!`;
 }
 
 function getContactName(peerId) {
@@ -183,9 +248,11 @@ function getContactName(peerId) {
   return c ? c.name : null;
 }
 
-// --- 6. DATA INCOMING & PERMANENT DELETE ---
+// --- 6. DATA HANDLING ---
 function handleIncomingData(data) {
-  if (data.type === 'chat') {
+  if (data.type === 'handshake') {
+    updateOnlineUI(data.deviceLabel);
+  } else if (data.type === 'chat') {
     playLoudChime();
     sendDesktopNotification("Message from " + (getContactName(activeConn.peer) || activeConn.peer), data.text);
     appendMessageUI(data.msgId, 'received', data.text, null, null, data.timestamp);
@@ -196,7 +263,6 @@ function handleIncomingData(data) {
     appendMessageUI(data.msgId, 'received', '', data.fileData, data.fileType, data.timestamp);
     saveMessageLocally(data.msgId, activeConn.peer, activeConn.peer, '', data.fileData, data.fileType);
   } else if (data.type === 'delete_msg_everyone') {
-    // Delete permanently from receiver side too
     const el = document.getElementById(`msg-${data.msgId}`);
     if (el) el.remove();
     deleteMessageLocally(data.msgId);
@@ -212,7 +278,7 @@ function handleIncomingData(data) {
   }
 }
 
-// --- 7. CHAT SENDING ---
+// --- 7. CHAT & PERMANENT DELETE ---
 document.getElementById('chat-form').onsubmit = (e) => {
   e.preventDefault();
   const input = document.getElementById('message-input');
@@ -243,7 +309,6 @@ document.getElementById('file-input').onchange = (e) => {
   reader.readAsDataURL(file);
 };
 
-// UI Appending with "Delete for Me" and "Delete for Everyone"
 function appendMessageUI(msgId, type, text, fileData = null, fileType = null, timestamp = Date.now()) {
   const container = document.getElementById('messages-container');
   const msgDiv = document.createElement('div');
@@ -288,7 +353,6 @@ function appendMessageUI(msgId, type, text, fileData = null, fileType = null, ti
   container.scrollTop = container.scrollHeight;
 }
 
-// Modal for "Delete for Me" vs "Delete for Everyone"
 function showDeleteChoiceModal(msgId, msgDiv) {
   const choiceModal = document.createElement('div');
   choiceModal.className = 'modal';
@@ -380,7 +444,7 @@ document.getElementById('my-live-input').oninput = (e) => {
   if (activeConn) activeConn.send({ type: 'live_typing', text: e.target.value });
 };
 
-// --- 9. BIG SCREEN SHARE & FULLSCREEN TOGGLE ---
+// --- 9. BIG SCREEN SHARE & FULLSCREEN ---
 document.getElementById('btn-screen-share').onclick = async () => {
   if (!activeConn) return;
   try {
@@ -388,9 +452,7 @@ document.getElementById('btn-screen-share').onclick = async () => {
     activeMediaCall = peer.call(activeConn.peer, stream);
     document.getElementById('call-modal').classList.remove('hidden');
     document.getElementById('call-status-title').textContent = "Sharing Screen...";
-  } catch (err) {
-    console.error("Screen Share cancelled:", err);
-  }
+  } catch (err) {}
 };
 
 peer.on('call', (call) => {
@@ -408,11 +470,10 @@ peer.on('call', (call) => {
   });
 });
 
-// Fullscreen toggle for screen share
 function toggleVideoFullscreen() {
   const video = document.getElementById('remote-screen-video');
   if (!document.fullscreenElement) {
-    video.requestFullscreen().catch(err => alert("Fullscreen error: " + err.message));
+    video.requestFullscreen().catch(() => {});
   } else {
     document.exitFullscreen();
   }
@@ -436,7 +497,7 @@ document.getElementById('btn-add-contact').onclick = () => {
   }
   localStorage.setItem('ghost_admin_contacts', JSON.stringify(contacts));
   renderContacts();
-  connectToPeer(id, name);
+  silentConnect(id, name);
 
   nameInput.value = '';
   idInput.value = '';
@@ -453,7 +514,7 @@ function renderContacts() {
       <span class="c-name">${contact.name}</span>
       <span class="c-id">${contact.id}</span>
     `;
-    li.onclick = () => connectToPeer(contact.id, contact.name);
+    li.onclick = () => silentConnect(contact.id, contact.name);
     list.appendChild(li);
   });
 }

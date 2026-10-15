@@ -24,21 +24,31 @@
           <h3>Ghost<span class="highlight">Chat</span></h3>
           <button id="btn-admin-toggle" class="btn-pin">🔒 Admin</button>
         </div>
-        <p class="my-id-box">My ID: <strong id="my-peer-id">Generating...</strong> 
+        <p class="my-id-box">
+          <span>ID: <strong id="my-peer-id">Starting...</strong></span>
           <button id="btn-copy-id" class="btn-copy">📋 Copy</button>
         </p>
+
+        <!-- Admin Device Mode (Laptop / PC) -->
+        <div id="device-selector-box" class="device-box hidden">
+          <label>Active Device:</label>
+          <select id="select-device-type">
+            <option value="PC">Admin (PC)</option>
+            <option value="Laptop">Admin (Laptop)</option>
+          </select>
+        </div>
       </div>
 
       <!-- Admin Panel (PIN 2007) -->
       <div id="admin-controls" class="hidden">
-        <div class="admin-badge">⚡ Admin Mode Activated</div>
+        <div class="admin-badge">⚡ Admin Terminal</div>
         <div class="add-contact">
-          <input type="text" id="target-contact-name" placeholder="Contact Name (e.g. Ali)">
-          <input type="text" id="target-peer-id" placeholder="Friend's Peer ID...">
-          <button id="btn-add-contact">+ Add Friend</button>
+          <input type="text" id="target-contact-name" placeholder="Friend's Name (e.g. Ali)">
+          <input type="text" id="target-peer-id" placeholder="Friend's Fixed ID (e.g. ali123)">
+          <button id="btn-add-contact">+ Add & Auto-Track</button>
         </div>
 
-        <div class="contacts-header">My Private Contacts</div>
+        <div class="contacts-header">Auto-Connecting Contacts</div>
         <ul id="contacts-list" class="contacts-list">
           <!-- Contacts dynamically loaded here -->
         </ul>
@@ -46,8 +56,11 @@
 
       <!-- Guest mode message -->
       <div id="guest-message" class="guest-panel">
-        <p>🔒 End-to-End Encrypted Private Terminal</p>
-        <small>Waiting for Admin to start conversation...</small>
+        <p>🔒 End-to-End Encrypted Terminal</p>
+        <div class="auto-pulse-box">
+          <span class="pulse-dot"></span>
+          <small id="guest-status-text">Scanning for Admin (PC / Laptop)...</small>
+        </div>
       </div>
     </aside>
 
@@ -56,7 +69,7 @@
       <div class="chat-header">
         <div>
           <h3 id="current-contact-name">Ghost Terminal</h3>
-          <span id="connection-status" class="status-offline">● Disconnected</span>
+          <span id="connection-status" class="status-offline">● Auto-Searching...</span>
         </div>
         <div class="header-actions">
           <button id="btn-start-call" class="btn-action" disabled>📞 Live Call</button>
@@ -66,7 +79,7 @@
 
       <!-- Messages Display -->
       <div id="messages-container" class="messages-container">
-        <div class="empty-state">Waiting for secure connection...</div>
+        <div class="empty-state">Waiting for peer to come online. Will auto-connect instantly!</div>
       </div>
 
       <!-- Chat Input Area -->
@@ -86,7 +99,6 @@
     <div class="modal-content">
       <h3 id="call-status-title">Incoming Call...</h3>
       
-      <!-- Big Screen Share Video + Fullscreen Button -->
       <div id="screen-wrapper" class="screen-video-wrapper hidden">
         <video id="remote-screen-video" autoplay playsinline></video>
         <button type="button" class="btn-fullscreen" onclick="toggleVideoFullscreen()">⛶ Fullscreen</button>
