@@ -30,7 +30,7 @@ if ("Notification" in window && Notification.permission !== "granted") {
 
 document.getElementById('btn-copy-id').onclick = () => {
   navigator.clipboard.writeText(myId);
-  alert("Node ID Copied to Clipboard!");
+  alert("Node ID Copied!");
 };
 
 const peer = new Peer(myId);
@@ -39,6 +39,11 @@ let currentContactPeerId = null;
 let activeMediaCall = null;
 let contacts = JSON.parse(localStorage.getItem('ghost_admin_contacts') || '[]');
 let latencyInterval = null;
+
+// Media Stream States
+let localStream = null;
+let isMicOn = false;
+let isCamOn = false;
 
 // --- 2. ADMIN LOCK UI ---
 const adminBtn = document.getElementById('btn-admin-toggle');
@@ -64,7 +69,7 @@ updateAdminUI();
 
 adminBtn.onclick = () => {
   if (isAdmin) {
-    if (confirm("Lock Admin Orchestrator?")) {
+    if (confirm("Lock Admin Terminal?")) {
       isAdmin = false;
       sessionStorage.removeItem('ghost_is_admin');
       localStorage.removeItem('ghost_my_id');
@@ -77,14 +82,14 @@ adminBtn.onclick = () => {
       sessionStorage.setItem('ghost_is_admin', 'true');
       location.reload();
     } else {
-      alert("Unauthorized Access Attempt.");
+      alert("Unauthorized Access.");
     }
   }
 };
 
-// --- 3. INDEXEDDB SETUP (ATOMIC MESSAGES) ---
+// --- 3. INDEXEDDB SETUP ---
 let db;
-const dbReq = indexedDB.open('GhostChatDB', 5);
+const dbReq = indexedDB.open('GhostChatDB', 6);
 dbReq.onupgradeneeded = (e) => {
   db = e.target.result;
   if (db.objectStoreNames.contains('messages')) db.deleteObjectStore('messages');
@@ -120,7 +125,7 @@ function loadContactMessages(contactId) {
   };
 }
 
-// --- 4. DUAL-FREQUENCY AUDIO & NOTIFICATIONS ---
+// --- 4. DUAL-FREQUENCY AUDIO ---
 function playLoudChime() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -154,7 +159,7 @@ function sendDesktopNotification(title, body) {
   }
 }
 
-// --- 5. ZERO-CLICK AUTO ENGINE & LATENCY MONITOR ---
+// --- 5. ZERO-CLICK AUTO ENGINE & LATENCY ---
 peer.on('open', (id) => {
   console.log('GhostNode Online:', id);
   startAutoConnectEngine();
@@ -190,7 +195,7 @@ function setupConnection(conn, customName = null) {
     activeConn = conn;
     currentContactPeerId = conn.peer;
 
-    const myDeviceLabel = isAdmin ? `Admin (${adminDevice})` : 'Peer Member';
+    const myDeviceLabel = isAdmin ? `Admin (${adminDevice})` : 'Peer Node';
     conn.send({ type: 'handshake', deviceLabel: myDeviceLabel });
 
     const displayName = customName || getContactName(conn.peer) || conn.peer;
@@ -199,7 +204,6 @@ function setupConnection(conn, customName = null) {
     loadContactMessages(conn.peer);
     if (isAdmin) renderContacts();
 
-    // Start P2P Latency Monitor
     startLatencyTracker();
   });
 
@@ -231,7 +235,7 @@ function updateOnlineUI(name) {
   statusEl.className = 'status-online';
   document.getElementById('current-contact-name').textContent = name;
   const guestStatus = document.getElementById('guest-status-text');
-  if (guestStatus) guestStatus.textContent = `P2P Encrypted Session Active with ${name}`;
+  if (guestStatus) guestStatus.textContent = `Heterogeneous Link Established with ${name}`;
 }
 
 function getContactName(peerId) {
@@ -239,7 +243,7 @@ function getContactName(peerId) {
   return c ? c.name : null;
 }
 
-// --- 6. DATA HANDLING, CODE PARSING & STUDIO SYNC ---
+// --- 6. DATA HANDLING ---
 function handleIncomingData(data) {
   if (data.type === 'ping') {
     activeConn.send({ type: 'pong', t: data.t });
@@ -267,7 +271,7 @@ function handleIncomingData(data) {
   } else if (data.type === 'call_ring') {
     showIncomingCallUI();
   } else if (data.type === 'call_accepted') {
-    document.getElementById('call-status-title').textContent = "Studio Session Live";
+    document.getElementById('call-status-title').textContent = "Adaptive Studio Live";
     document.getElementById('btn-accept-call').classList.add('hidden');
   } else if (data.type === 'call_ended') {
     closeCallModal();
@@ -276,7 +280,6 @@ function handleIncomingData(data) {
   }
 }
 
-// Code Block Formatter
 function formatMessageContent(text) {
   if (text.startsWith('```') && text.endsWith('```')) {
     const code = text.slice(3, -3);
@@ -290,7 +293,7 @@ function formatMessageContent(text) {
   return span;
 }
 
-// --- 7. CHAT, EMOJIS & TYPING DISPATCH ---
+// --- 7. CHAT & EMOJIS ---
 const msgInput = document.getElementById('message-input');
 let typingTimeout = null;
 
@@ -309,7 +312,6 @@ function handleTypingIndicator(isTyping) {
   else el.classList.add('hidden');
 }
 
-// Emoji Quick Click
 document.querySelectorAll('.q-emoji').forEach(emoji => {
   emoji.onclick = () => {
     msgInput.value += emoji.getAttribute('data-emoji');
@@ -384,7 +386,6 @@ function appendMessageUI(msgId, type, text, fileData = null, fileType = null, ti
   container.scrollTop = container.scrollHeight;
 }
 
-// In-Call Live Studio Feed Message
 function appendStudioMessage(sender, text) {
   const feed = document.getElementById('in-call-messages');
   if (!feed) return;
@@ -427,34 +428,187 @@ function showDeleteChoiceModal(msgId, msgDiv) {
   document.getElementById('opt-del-cancel').onclick = () => choiceModal.remove();
 }
 
-// --- 8. STUDIO CALL & SCREEN SHARE ---
+// --- 8. HETEROGENEOUS ADAPTIVE AV ENGINE ---
 const ringtone = document.getElementById('ringtone');
 function playRingtone() { ringtone.play().catch(() => playLoudChime()); }
 function stopRingtone() { ringtone.pause(); ringtone.currentTime = 0; }
 
-document.getElementById('btn-start-call').onclick = () => {
+// Safe Hardware Discovery: Tries to grab mic/cam, returns silent/null stream if not found
+async function getAdaptiveMediaStream(wantAudio = false, wantVideo = false) {
+  if (!wantAudio && !wantVideo) {
+    // Generate a dummy silent audio track to keep WebRTC media session alive without mic hardware!
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const dst = ctx.createMediaStreamDestination();
+    osc.connect(dst);
+    osc.start();
+    const track = dst.stream.getAudioTracks()[0];
+    track.enabled = false;
+    return new MediaStream([track]);
+  }
+
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio: wantAudio, video: wantVideo });
+  } catch (err) {
+    console.warn("Hardware device not detected or denied. Running silent fallback:", err);
+    // Fallback: silent stream
+    return getAdaptiveMediaStream(false, false);
+  }
+}
+
+// Start Call Button
+document.getElementById('btn-start-call').onclick = async () => {
   if (!activeConn) return;
   activeConn.send({ type: 'call_ring' });
   document.getElementById('call-modal').classList.remove('hidden');
   document.getElementById('call-status-title').textContent = "Pinging Peer Node...";
   document.getElementById('btn-accept-call').classList.add('hidden');
+
+  // Prepare safe adaptive stream (checks if mic exists, else silent)
+  localStream = await getAdaptiveMediaStream(true, false);
+  updateHardwareStatusPill();
+  activeMediaCall = peer.call(activeConn.peer, localStream);
+  bindCallEvents(activeMediaCall);
 };
 
 function showIncomingCallUI() {
   playRingtone();
   const name = getContactName(activeConn.peer) || activeConn.peer;
-  sendDesktopNotification("Incoming Studio Session!", `${name} requests P2P Collaboration`);
+  sendDesktopNotification("Adaptive Session Request", `${name} is calling!`);
   document.getElementById('call-modal').classList.remove('hidden');
   document.getElementById('call-status-title').textContent = "Incoming Call from " + name;
   document.getElementById('btn-accept-call').classList.remove('hidden');
 }
 
-document.getElementById('btn-accept-call').onclick = () => {
+document.getElementById('btn-accept-call').onclick = async () => {
   stopRingtone();
   activeConn.send({ type: 'call_accepted' });
-  document.getElementById('call-status-title').textContent = "Studio Session Live";
+  document.getElementById('call-status-title').textContent = "Adaptive Studio Live";
   document.getElementById('btn-accept-call').classList.add('hidden');
+
+  // Mobile or PC safely grabs whatever hardware is present
+  localStream = await getAdaptiveMediaStream(true, false);
+  updateHardwareStatusPill();
+  if (activeMediaCall) {
+    activeMediaCall.answer(localStream);
+  }
 };
+
+peer.on('call', async (call) => {
+  activeMediaCall = call;
+  bindCallEvents(call);
+});
+
+function bindCallEvents(call) {
+  call.on('stream', (remoteStream) => {
+    const video = document.getElementById('remote-stream-video');
+    video.srcObject = remoteStream;
+    // Remote audio plays loud through speaker automatically!
+    video.muted = false;
+    document.getElementById('call-modal').classList.remove('hidden');
+    document.getElementById('call-status-title').textContent = "Studio Session Live";
+    updateHardwareStatusPill();
+  });
+}
+
+function updateHardwareStatusPill() {
+  const pill = document.getElementById('studio-media-status');
+  if (localStream && localStream.getAudioTracks().some(t => t.enabled)) {
+    pill.textContent = "🎙️ Mic Active";
+    pill.style.color = "#3fb950";
+  } else {
+    pill.textContent = "🔇 No Mic (Text & AV Output Only)";
+    pill.style.color = "#58a6ff";
+  }
+}
+
+// In-Call Controls: Toggle Mic
+document.getElementById('btn-toggle-mic').onclick = async () => {
+  const btn = document.getElementById('btn-toggle-mic');
+  if (!isMicOn) {
+    try {
+      const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const audioTrack = micStream.getAudioTracks()[0];
+      if (activeMediaCall && activeMediaCall.peerConnection) {
+        const sender = activeMediaCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'audio');
+        if (sender) sender.replaceTrack(audioTrack);
+      }
+      isMicOn = true;
+      btn.textContent = "🎙️ Mic: ON";
+      btn.classList.add('active');
+    } catch(e) {
+      alert("No Microphone detected on this device. Text participation active!");
+    }
+  } else {
+    isMicOn = false;
+    btn.textContent = "🎙️ Mic: Off";
+    btn.classList.remove('active');
+  }
+  updateHardwareStatusPill();
+};
+
+// In-Call Controls: Toggle Camera (For Mobile or Laptop Webcam)
+document.getElementById('btn-toggle-cam').onclick = async () => {
+  const btn = document.getElementById('btn-toggle-cam');
+  const previewCard = document.getElementById('local-preview-card');
+  const localVideo = document.getElementById('local-stream-video');
+
+  if (!isCamOn) {
+    try {
+      const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const videoTrack = camStream.getVideoTracks()[0];
+      localVideo.srcObject = camStream;
+      previewCard.classList.remove('hidden');
+
+      if (activeMediaCall && activeMediaCall.peerConnection) {
+        const sender = activeMediaCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) sender.replaceTrack(videoTrack);
+        else activeMediaCall.peerConnection.addTrack(videoTrack, camStream);
+      }
+      isCamOn = true;
+      btn.textContent = "📷 Cam: ON";
+      btn.classList.add('active');
+    } catch(e) {
+      alert("No Camera device found on this system.");
+    }
+  } else {
+    isCamOn = false;
+    btn.textContent = "📷 Cam: Off";
+    btn.classList.remove('active');
+    previewCard.classList.add('hidden');
+    if (localVideo.srcObject) {
+      localVideo.srcObject.getTracks().forEach(t => t.stop());
+      localVideo.srcObject = null;
+    }
+  }
+};
+
+// Screen Share WITH SYSTEM AUDIO (PC to Mobile)
+async function triggerScreenShareWithAudio() {
+  if (!activeConn) return;
+  try {
+    // Captures both desktop display + system audio!
+    const displayStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: { echoCancellation: true, noiseSuppression: true }
+    });
+
+    document.getElementById('call-modal').classList.remove('hidden');
+    document.getElementById('call-status-title').textContent = "Broadcasting Display + Audio...";
+
+    activeMediaCall = peer.call(activeConn.peer, displayStream);
+    bindCallEvents(activeMediaCall);
+
+    displayStream.getVideoTracks()[0].onended = () => {
+      document.getElementById('call-status-title').textContent = "Screen Share Stopped";
+    };
+  } catch (err) {
+    console.warn("Screen share cancelled:", err);
+  }
+}
+
+document.getElementById('btn-screen-share').onclick = triggerScreenShareWithAudio;
+document.getElementById('btn-screen-in-call').onclick = triggerScreenShareWithAudio;
 
 document.getElementById('btn-end-call').onclick = () => {
   stopRingtone();
@@ -465,9 +619,11 @@ document.getElementById('btn-end-call').onclick = () => {
 function closeCallModal() {
   stopRingtone();
   document.getElementById('call-modal').classList.add('hidden');
-  const video = document.getElementById('remote-screen-video');
+  const video = document.getElementById('remote-stream-video');
   video.srcObject = null;
-  document.getElementById('no-video-placeholder').classList.remove('hidden');
+  const localVideo = document.getElementById('local-stream-video');
+  if (localVideo.srcObject) localVideo.srcObject.getTracks().forEach(t => t.stop());
+  if (localStream) localStream.getTracks().forEach(t => t.stop());
   if (activeMediaCall) activeMediaCall.close();
 }
 
@@ -475,39 +631,13 @@ document.getElementById('my-live-input').oninput = (e) => {
   if (activeConn) activeConn.send({ type: 'live_typing', text: e.target.value });
 };
 
-// Studio Screen Share
-document.getElementById('btn-screen-share').onclick = async () => {
-  if (!activeConn) return;
-  try {
-    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-    activeMediaCall = peer.call(activeConn.peer, stream);
-    document.getElementById('call-modal').classList.remove('hidden');
-    document.getElementById('call-status-title').textContent = "Broadcasting Display Stream...";
-    document.getElementById('no-video-placeholder').classList.add('hidden');
-  } catch (err) {}
-};
-
-peer.on('call', (call) => {
-  activeMediaCall = call;
-  playLoudChime();
-  sendDesktopNotification("Stream Broadcast", "Remote Screen Stream Activated");
-  call.answer();
-  call.on('stream', (remoteStream) => {
-    const video = document.getElementById('remote-screen-video');
-    video.srcObject = remoteStream;
-    document.getElementById('no-video-placeholder').classList.add('hidden');
-    document.getElementById('call-modal').classList.remove('hidden');
-    document.getElementById('call-status-title').textContent = "Receiving Remote Stream";
-  });
-});
-
 document.getElementById('btn-toggle-pip').onclick = () => {
-  const video = document.getElementById('remote-screen-video');
-  if (!document.fullscreenElement) video.requestFullscreen().catch(() => {});
+  const modal = document.querySelector('.studio-modal');
+  if (!document.fullscreenElement) modal.requestFullscreen().catch(() => {});
   else document.exitFullscreen();
 };
 
-// --- 9. ADMIN CONTACTS MANAGEMENT ---
+// --- 9. ADMIN CONTACTS ---
 document.getElementById('btn-add-contact').onclick = () => {
   if (!isAdmin) return;
   const nameInput = document.getElementById('target-contact-name');
@@ -548,7 +678,7 @@ function toggleInputs(enabled) {
   document.getElementById('btn-screen-share').disabled = !enabled;
 }
 
-// --- 10. PRIVACY ENGINE ---
+// --- 10. PRIVACY ---
 window.addEventListener('blur', () => document.getElementById('privacy-shield').classList.remove('hidden'));
 window.addEventListener('focus', () => document.getElementById('privacy-shield').classList.add('hidden'));
 document.addEventListener('contextmenu', e => e.preventDefault());
