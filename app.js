@@ -24,12 +24,6 @@ if (isAdmin) {
 
 document.getElementById('my-peer-id').textContent = myId;
 
-const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-if (isMobile) {
-  document.getElementById('btn-screen-share').style.display = 'none';
-  document.getElementById('btn-screen-in-call').style.display = 'none';
-}
-
 if ("Notification" in window && Notification.permission !== "granted") {
   Notification.requestPermission();
 }
@@ -39,7 +33,7 @@ document.getElementById('btn-copy-id').onclick = () => {
   alert("Node ID Copied!");
 };
 
-// MULTI-STUN PEER INITIALIZATION (Cross-carrier 4G <-> Wi-Fi connectivity)
+// HIGH-AVAILABILITY MULTI-STUN PEER INITIALIZATION
 const peer = new Peer(myId, {
   config: {
     iceServers: [
@@ -219,7 +213,7 @@ function setupConnection(conn, customName = null) {
     activeConn = conn;
     currentContactPeerId = conn.peer;
 
-    const myDeviceLabel = isAdmin ? `Admin (${adminDevice})` : (isMobile ? 'Mobile Node' : 'PC Node');
+    const myDeviceLabel = isAdmin ? `Admin (${adminDevice})` : 'Peer Node';
     conn.send({ type: 'handshake', deviceLabel: myDeviceLabel });
 
     const displayName = customName || getContactName(conn.peer) || conn.peer;
@@ -282,7 +276,7 @@ function getContactName(peerId) {
   return c ? c.name : null;
 }
 
-// --- 6. DATA INCOMING ---
+// --- 6. DATA INCOMING & SCREEN SHARE HUD SYNC ---
 function handleIncomingData(data) {
   if (data.type === 'ping') {
     activeConn.send({ type: 'pong', t: data.t });
@@ -298,6 +292,10 @@ function handleIncomingData(data) {
     sendDesktopNotification("Node Message", data.text);
     appendMessageUI(data.msgId, 'received', data.text, null, null, null, data.timestamp);
     appendStudioMessage(getContactName(activeConn.peer) || 'Peer', data.text);
+    
+    // UPDATE FLOATING SCREEN HUD OVERLAY
+    document.getElementById('hud-latest-text').textContent = `${getContactName(activeConn.peer) || 'Peer'}: ${data.text}`;
+    
     saveMessageLocally(data.msgId, activeConn.peer, activeConn.peer, data.text);
   } else if (data.type === 'file') {
     playLoudChime();
@@ -316,6 +314,7 @@ function handleIncomingData(data) {
     closeCallModal();
   } else if (data.type === 'live_typing') {
     document.getElementById('remote-live-text').textContent = data.text || '...';
+    document.getElementById('hud-latest-text').textContent = `Typing: ${data.text}`;
   }
 }
 
@@ -407,6 +406,7 @@ document.getElementById('chat-form').onsubmit = (e) => {
   activeConn.send({ type: 'chat', text, msgId, timestamp });
   appendMessageUI(msgId, 'sent', text, null, null, null, timestamp);
   appendStudioMessage('Me', text);
+  document.getElementById('hud-latest-text').textContent = `Me: ${text}`;
   saveMessageLocally(msgId, activeConn.peer, myId, text);
   msgInput.value = '';
   activeConn.send({ type: 'typing_status', isTyping: false });
@@ -428,7 +428,7 @@ document.getElementById('file-input').onchange = (e) => {
   reader.readAsDataURL(file);
 };
 
-// Voice Memo
+// VOICE NOTE PUSH-TO-TALK (WITH COMPREHENSIVE PERMISSION HELPER)
 const voiceBtn = document.getElementById('btn-voice-memo');
 voiceBtn.onclick = async () => {
   if (!activeConn) return;
@@ -457,7 +457,11 @@ voiceBtn.onclick = async () => {
       voiceBtn.classList.add('recording');
       voiceBtn.title = "Click to Stop & Send Voice Note";
     } catch(err) {
-      alert("No Microphone detected on this device to record voice note.");
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        alert("⚠️ Microphone Permission Blocked!\nPlease open Chrome/Browser Settings -> Site Settings -> Microphone -> Allow for this site.");
+      } else {
+        alert("⚠️ No physical microphone available on this device.");
+      }
     }
   } else {
     mediaRecorder.stop();
@@ -568,12 +572,12 @@ function showDeleteChoiceModal(msgId, msgDiv) {
   document.getElementById('opt-del-cancel').onclick = () => choiceModal.remove();
 }
 
-// --- 8. REVOLUTIONARY ADAPTIVE AV ENGINE (ZERO-FAIL SDP FIX) ---
+// --- 8. REVOLUTIONARY ADAPTIVE AV ENGINE (SDP VIDEO GUARANTEE) ---
 const ringtone = document.getElementById('ringtone');
 function playRingtone() { ringtone.play().catch(() => playLoudChime()); }
 function stopRingtone() { ringtone.pause(); ringtone.currentTime = 0; }
 
-// Generates a lightweight Canvas Video Track so SDP OFFER ALWAYS CONTAINS VIDEO m-line!
+// Generates Canvas Video Track so SDP OFFER ALWAYS INCLUDES VIDEO LINE
 function createSyntheticVideoStream() {
   const canvas = document.createElement('canvas');
   canvas.width = 320;
@@ -583,11 +587,11 @@ function createSyntheticVideoStream() {
   ctx.fillRect(0, 0, 320, 240);
   ctx.font = '14px monospace';
   ctx.fillStyle = '#58a6ff';
-  ctx.fillText('💻 PC Node (Voice/Text)', 40, 120);
+  ctx.fillText('💻 Terminal Active (Audio/Text)', 30, 120);
   return canvas.captureStream(5);
 }
 
-// Generates silent audio track if device has no mic
+// Generates Silent Audio Track for mic-less devices
 function createSilentAudioStream() {
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
   const osc = ctx.createOscillator();
@@ -599,37 +603,34 @@ function createSilentAudioStream() {
   return new MediaStream([track]);
 }
 
-// Core Adaptive Media Acquisition
-async function getAdaptiveMediaStream(preferredAudio = true, preferredVideo = true) {
+// Master Adaptive Stream Acquisition
+async function getAdaptiveMediaStream(wantAudio = true, wantVideo = true) {
   let finalStream = new MediaStream();
 
-  // Step 1: Acquire Real Camera / Mic
-  if (preferredAudio || preferredVideo) {
+  // Try real hardware first
+  try {
+    const realStream = await navigator.mediaDevices.getUserMedia({
+      audio: wantAudio,
+      video: wantVideo ? { facingMode: 'user' } : false
+    });
+    realStream.getTracks().forEach(t => finalStream.addTrack(t));
+  } catch (err) {
+    console.warn("Direct AV hardware capture failed, trying audio fallback:", err);
     try {
-      const realStream = await navigator.mediaDevices.getUserMedia({
-        audio: preferredAudio,
-        video: preferredVideo ? { facingMode: 'user' } : false
-      });
-      realStream.getTracks().forEach(t => finalStream.addTrack(t));
-    } catch (err) {
-      console.warn("Could not acquire primary AV hardware, attempting mic only:", err);
-      try {
-        const audioOnly = await navigator.mediaDevices.getUserMedia({ audio: true });
-        audioOnly.getTracks().forEach(t => finalStream.addTrack(t));
-      } catch (err2) {
-        console.warn("No real mic found. Using silent audio fallback.");
-      }
+      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStream.getTracks().forEach(t => finalStream.addTrack(t));
+    } catch (err2) {
+      console.warn("No physical mic accessible. Adding silent audio pipeline.");
     }
   }
 
-  // Step 2: GUARANTEE SDP COMPLIANCE
-  // If no audio track present, add silent audio
+  // Ensure Audio Track Exists in SDP
   if (finalStream.getAudioTracks().length === 0) {
     const silent = createSilentAudioStream();
     finalStream.addTrack(silent.getAudioTracks()[0]);
   }
 
-  // If no video track present, add synthetic canvas video so receiver CAN answer with camera!
+  // Ensure Video Track Exists in SDP (Guarantees remote mobile answerer can send video!)
   if (finalStream.getVideoTracks().length === 0) {
     const synthetic = createSyntheticVideoStream();
     finalStream.addTrack(synthetic.getVideoTracks()[0]);
@@ -647,8 +648,8 @@ document.getElementById('btn-start-call').onclick = async () => {
   document.getElementById('call-status-title').textContent = "Pinging Peer Node...";
   document.getElementById('btn-accept-call').classList.add('hidden');
 
-  localStream = await getAdaptiveMediaStream(true, isMobile);
-  if (isMobile) {
+  localStream = await getAdaptiveMediaStream(true, true);
+  if (localStream.getVideoTracks().some(t => t.readyState === 'live')) {
     document.getElementById('local-stream-video').srcObject = localStream;
     document.getElementById('local-preview-card').classList.remove('hidden');
   }
@@ -669,7 +670,7 @@ document.getElementById('btn-group-call').onclick = async () => {
   document.getElementById('btn-accept-call').classList.add('hidden');
   document.getElementById('group-participants-count').classList.remove('hidden');
 
-  localStream = await getAdaptiveMediaStream(true, isMobile);
+  localStream = await getAdaptiveMediaStream(true, true);
   updateHardwareStatusPill();
 
   contacts.forEach(contact => {
@@ -680,6 +681,24 @@ document.getElementById('btn-group-call').onclick = async () => {
       bindCallEvents(call, contact.id, contact.name);
     } catch(err) {}
   });
+};
+
+// IN-CALL "ADD PERSON" TO ONGOING SESSION
+document.getElementById('btn-in-call-add').onclick = async () => {
+  const targetId = prompt("Enter Node ID of the person you want to add to this active call:");
+  if (!targetId || targetId === myId) return;
+
+  if (!localStream) localStream = await getAdaptiveMediaStream(true, true);
+
+  try {
+    const conn = peer.connect(targetId, { reliable: true });
+    conn.on('open', () => conn.send({ type: 'call_ring', isGroup: true }));
+    const call = peer.call(targetId, localStream);
+    bindCallEvents(call, targetId, targetId);
+    alert(`Dialing Node ${targetId} into live session!`);
+  } catch (err) {
+    alert("Could not connect to Node: " + err.message);
+  }
 };
 
 function showIncomingCallUI(isGroup = false) {
@@ -694,20 +713,13 @@ function showIncomingCallUI(isGroup = false) {
 document.getElementById('btn-accept-call').onclick = async () => {
   stopRingtone();
   activeConn.send({ type: 'call_accepted', isGroup: isGroupCallActive });
-  document.getElementById('call-status-title').textContent = isGroupCallActive ? "Group Mesh Live" : "Adaptive Session Live";
+  document.getElementById('call-status-title').textContent = isGroupCallActive ? "Group Mesh Live" : "Live Session Active";
   document.getElementById('btn-accept-call').classList.add('hidden');
 
-  // Mobile grabs real camera + mic; PC uses whatever it has + synthetic fallback
-  localStream = await getAdaptiveMediaStream(true, isMobile);
-  if (isMobile) {
+  localStream = await getAdaptiveMediaStream(true, true);
+  if (localStream.getVideoTracks().some(t => t.readyState === 'live')) {
     document.getElementById('local-stream-video').srcObject = localStream;
     document.getElementById('local-preview-card').classList.remove('hidden');
-    isCamOn = true;
-    document.getElementById('btn-toggle-cam').textContent = "📷 Cam: ON";
-    document.getElementById('btn-toggle-cam').classList.add('active');
-    isMicOn = true;
-    document.getElementById('btn-toggle-mic').textContent = "🎙️ Mic: ON";
-    document.getElementById('btn-toggle-mic').classList.add('active');
   }
 
   updateHardwareStatusPill();
@@ -720,9 +732,9 @@ document.getElementById('btn-accept-call').onclick = async () => {
 peer.on('call', async (call) => {
   activeCalls[call.peer] = call;
   
-  // If call is already open (e.g. PC started Screen Sharing), AUTO-ANSWER to receive screen stream!
+  // If call is already active (e.g. Screen Share or stream upgrade), auto-answer immediately
   if (!document.getElementById('call-modal').classList.contains('hidden')) {
-    if (!localStream) localStream = await getAdaptiveMediaStream(false, false);
+    if (!localStream) localStream = await getAdaptiveMediaStream(true, false);
     call.answer(localStream);
   }
   bindCallEvents(call, call.peer);
@@ -740,7 +752,6 @@ function bindCallEvents(call, peerId, peerName = null) {
     video.muted = false;
     audio.srcObject = remoteStream;
 
-    // Guaranteed video & audio play with autoplay unlock
     video.play().catch(e => {
       document.getElementById('btn-unmute-audio').classList.remove('hidden');
     });
@@ -776,10 +787,13 @@ function updateGroupCountPill() {
 function updateHardwareStatusPill() {
   const pill = document.getElementById('studio-media-status');
   if (localStream && localStream.getVideoTracks().some(t => t.enabled && t.readyState === 'live')) {
-    pill.textContent = isMobile ? "📷 Mobile Camera + Mic Active" : "💻 PC Terminal Active";
+    pill.textContent = "📷 Camera + Mic Active";
+    pill.style.color = "#3fb950";
+  } else if (localStream && localStream.getAudioTracks().some(t => t.enabled && t.readyState === 'live')) {
+    pill.textContent = "🎙️ Mic Active";
     pill.style.color = "#3fb950";
   } else {
-    pill.textContent = "🔇 Text/Voice Output Mode";
+    pill.textContent = "🔇 Output / Text Mode";
     pill.style.color = "#58a6ff";
   }
 }
@@ -800,7 +814,11 @@ document.getElementById('btn-toggle-mic').onclick = async () => {
       btn.textContent = "🎙️ Mic: ON";
       btn.classList.add('active');
     } catch(e) {
-      alert("No Microphone detected on this device. Text participation active!");
+      if (e.name === 'NotAllowedError') {
+        alert("⚠️ Microphone permission denied in browser settings! Please allow microphone access in site settings.");
+      } else {
+        alert("⚠️ No physical microphone available on this device.");
+      }
     }
   } else {
     isMicOn = false;
@@ -834,7 +852,7 @@ document.getElementById('btn-toggle-cam').onclick = async () => {
       btn.textContent = "📷 Cam: ON";
       btn.classList.add('active');
     } catch(e) {
-      alert("No Camera hardware detected on this device.");
+      alert("⚠️ Camera hardware not available or permission denied.");
     }
   } else {
     isCamOn = false;
@@ -849,12 +867,13 @@ document.getElementById('btn-toggle-cam').onclick = async () => {
   updateHardwareStatusPill();
 };
 
-// PC SCREEN SHARE WITH AUDIO TO MOBILE
-async function triggerScreenShareWithAudio() {
-  if (isMobile) {
-    return alert("Screen sharing is not supported by mobile browsers.");
+// UNIVERSAL SCREEN SHARE (WORKS ON PC AND SUPPORTED MOBILE CHROME)
+async function triggerUniversalScreenShare() {
+  if (!navigator.mediaDevices.getDisplayMedia) {
+    return alert("⚠️ Your browser does not support screen sharing. Please use modern Chrome on Desktop/Android.");
   }
   if (!activeConn && Object.keys(activeCalls).length === 0) return;
+
   try {
     const displayStream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
@@ -862,7 +881,7 @@ async function triggerScreenShareWithAudio() {
     });
 
     document.getElementById('call-modal').classList.remove('hidden');
-    document.getElementById('call-status-title').textContent = "Broadcasting Display + Audio...";
+    document.getElementById('call-status-title').textContent = "Broadcasting Display Stream...";
 
     const localVideo = document.getElementById('local-stream-video');
     localVideo.srcObject = displayStream;
@@ -871,7 +890,6 @@ async function triggerScreenShareWithAudio() {
     const videoTrack = displayStream.getVideoTracks()[0];
     const audioTrack = displayStream.getAudioTracks()[0];
 
-    // Direct track replacement across all active call senders
     Object.values(activeCalls).forEach(call => {
       if (call.peerConnection) {
         const vSender = call.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
@@ -883,7 +901,6 @@ async function triggerScreenShareWithAudio() {
       }
     });
 
-    // Also initiate fresh stream call to ensure mobile receives screen stream
     if (activeConn) {
       const screenCall = peer.call(activeConn.peer, displayStream);
       bindCallEvents(screenCall, activeConn.peer);
@@ -897,8 +914,8 @@ async function triggerScreenShareWithAudio() {
   }
 }
 
-document.getElementById('btn-screen-share').onclick = triggerScreenShareWithAudio;
-document.getElementById('btn-screen-in-call').onclick = triggerScreenShareWithAudio;
+document.getElementById('btn-screen-share').onclick = triggerUniversalScreenShare;
+document.getElementById('btn-screen-in-call').onclick = triggerUniversalScreenShare;
 
 document.getElementById('btn-end-call').onclick = () => {
   stopRingtone();
@@ -929,6 +946,7 @@ function closeCallModal() {
 
 document.getElementById('my-live-input').oninput = (e) => {
   if (activeConn) activeConn.send({ type: 'live_typing', text: e.target.value });
+  document.getElementById('hud-latest-text').textContent = `Me: ${e.target.value}`;
 };
 
 document.getElementById('btn-toggle-pip').onclick = () => {
@@ -994,7 +1012,7 @@ function toggleInputs(enabled) {
   msgInput.disabled = !enabled;
   document.getElementById('btn-send').disabled = !enabled;
   document.getElementById('btn-start-call').disabled = !enabled;
-  if (!isMobile) document.getElementById('btn-screen-share').disabled = !enabled;
+  document.getElementById('btn-screen-share').disabled = !enabled;
 }
 
 // --- 10. PRIVACY ---

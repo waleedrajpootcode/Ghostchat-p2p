@@ -20,7 +20,7 @@
     <aside class="sidebar" id="sidebar">
       <div class="my-profile">
         <div class="brand-row">
-          <h3>Ghost<span class="highlight">Node</span> <small class="saas-badge">v4.0 Enterprise</small></h3>
+          <h3>Ghost<span class="highlight">Node</span> <small class="saas-badge">v4.5 Pro</small></h3>
           <button id="btn-admin-toggle" class="btn-pin">🔒 Admin</button>
         </div>
         
@@ -38,7 +38,7 @@
         </div>
       </div>
 
-      <!-- Admin Panel -->
+      <!-- Admin Terminal -->
       <div id="admin-controls" class="hidden">
         <div class="admin-badge">⚡ Orchestrator Terminal</div>
         <div class="add-contact">
@@ -54,7 +54,7 @@
       <!-- Guest Mode -->
       <div id="guest-message" class="guest-panel">
         <div class="e2ee-badge">🔒 Direct Mesh Active</div>
-        <p>100% P2P Serverless Tunnel. No middle server stores your media or text.</p>
+        <p>100% P2P Serverless Tunnel. No intermediate database.</p>
         <div class="auto-pulse-box">
           <span class="pulse-dot"></span>
           <small id="guest-status-text">Scanning for Admin Nodes...</small>
@@ -67,7 +67,7 @@
       <header class="chat-header">
         <div class="header-info">
           <div class="title-row">
-            <h3 id="current-contact-name">Direct P2P Channel</h3>
+            <h3 id="current-contact-name">Direct Channel</h3>
             <span id="latency-badge" class="latency-badge hidden">⚡ -- ms</span>
             <span id="e2ee-fingerprint" class="e2ee-hash-badge hidden">🔒 E2EE: Ready</span>
           </div>
@@ -118,7 +118,7 @@
 
   </div>
 
-  <!-- CALL & SCREEN SHARE MODAL (Universal Adaptive) -->
+  <!-- CALL & SCREEN SHARE STUDIO MODAL -->
   <div id="call-modal" class="modal hidden">
     <div class="modal-content studio-modal">
       
@@ -129,6 +129,7 @@
           <span id="group-participants-count" class="group-count-pill hidden">👥 1 in Session</span>
         </div>
         <div class="studio-header-controls">
+          <button id="btn-in-call-add" class="btn-action" title="Add Person to Active Call">➕ Add Person</button>
           <button id="btn-toggle-pip" class="btn-action">⛶ Fullscreen</button>
         </div>
       </div>
@@ -137,11 +138,17 @@
         
         <!-- Video Stream View -->
         <div class="studio-stream-area">
+          
+          <!-- Live Floating Screen-Share HUD (Overlay on top of video) -->
+          <div id="screen-hud-overlay" class="screen-hud-overlay">
+            <span class="hud-badge">💬 Live Screen Overlay:</span>
+            <span id="hud-latest-text" class="hud-text">Waiting for messages...</span>
+          </div>
+
           <div id="video-grid" class="video-grid">
             <div id="remote-card-main" class="video-card">
               <video id="remote-stream-video" autoplay playsinline webkit-playsinline></video>
-              <span class="video-label" id="remote-stream-label">Remote Stream (Video + Audio)</span>
-              <!-- Backup audio element for 100% sound delivery -->
+              <span class="video-label" id="remote-stream-label">Remote Stream</span>
               <audio id="remote-audio-player" autoplay playsinline></audio>
             </div>
             
@@ -155,7 +162,7 @@
           <div class="studio-control-toolbar">
             <button id="btn-toggle-mic" class="tool-btn" title="Toggle Mic">🎙️ Mic: Off</button>
             <button id="btn-toggle-cam" class="tool-btn" title="Toggle Camera">📷 Cam: Off</button>
-            <button id="btn-screen-in-call" class="tool-btn" title="Share Screen + Sound">🖥️ Screen</button>
+            <button id="btn-screen-in-call" class="tool-btn" title="Share Screen + Sound">🖥️ Share Screen</button>
             <button id="btn-unmute-audio" class="tool-btn hidden" style="background:#58a6ff; color:#0d1117;">🔊 Tap to Enable Audio</button>
           </div>
         </div>

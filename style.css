@@ -448,6 +448,25 @@ body {
   position: relative;
 }
 
+/* FLOATING LIVE SCREEN HUD (SUBTITLE/OVERLAY) */
+.screen-hud-overlay {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  background: rgba(13, 17, 23, 0.88);
+  border: 1px solid #388bfd66;
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 50;
+  backdrop-filter: blur(4px);
+}
+.hud-badge { font-size: 11px; color: #58a6ff; font-weight: 700; }
+.hud-text { font-size: 13px; color: #3fb950; font-weight: 600; font-family: monospace; }
+
 .video-grid {
   flex: 1;
   display: grid;
@@ -500,7 +519,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
   padding: 0 16px;
 }
 
@@ -587,7 +606,6 @@ body {
   .app-container { flex-direction: column; }
   .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid #21262d; }
   
-  /* WhatsApp Call Layout on Mobile */
   .studio-modal {
     width: 100vw;
     height: 100vh;
