@@ -3,116 +3,151 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GhostChat Private</title>
+  <title>GhostNode - P2P Collaboration Studio</title>
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.json">
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body>
 
-  <!-- Anti-Screenshot Privacy Shield -->
   <div id="privacy-shield" class="hidden">
-    <h2>⚠️ Content Hidden for Privacy</h2>
+    <h2>⚠️ Privacy Shield Active - Window Blurred</h2>
   </div>
 
   <div class="app-container">
     
-    <!-- LEFT SIDEBAR -->
+    <!-- SIDEBAR -->
     <aside class="sidebar" id="sidebar">
       <div class="my-profile">
         <div class="brand-row">
-          <h3>Ghost<span class="highlight">Chat</span></h3>
+          <h3>Ghost<span class="highlight">Node</span> <small class="saas-badge">P2P v2.0</small></h3>
           <button id="btn-admin-toggle" class="btn-pin">🔒 Admin</button>
         </div>
-        <p class="my-id-box">
-          <span>ID: <strong id="my-peer-id">Starting...</strong></span>
-          <button id="btn-copy-id" class="btn-copy">📋 Copy</button>
-        </p>
+        
+        <div class="my-id-box">
+          <span>Node ID: <strong id="my-peer-id">Booting...</strong></span>
+          <button id="btn-copy-id" class="btn-copy" title="Copy Node ID">📋</button>
+        </div>
 
-        <!-- Admin Device Mode (Laptop / PC) -->
         <div id="device-selector-box" class="device-box hidden">
-          <label>Active Device:</label>
+          <label>Device Tag:</label>
           <select id="select-device-type">
-            <option value="PC">Admin (PC)</option>
+            <option value="PC">Admin (Desktop PC)</option>
             <option value="Laptop">Admin (Laptop)</option>
           </select>
         </div>
       </div>
 
-      <!-- Admin Panel (PIN 2007) -->
+      <!-- Admin Panel -->
       <div id="admin-controls" class="hidden">
-        <div class="admin-badge">⚡ Admin Terminal</div>
+        <div class="admin-badge">⚡ Orchestrator Terminal</div>
         <div class="add-contact">
-          <input type="text" id="target-contact-name" placeholder="Friend's Name (e.g. Ali)">
-          <input type="text" id="target-peer-id" placeholder="Friend's Fixed ID (e.g. ali123)">
-          <button id="btn-add-contact">+ Add & Auto-Track</button>
+          <input type="text" id="target-contact-name" placeholder="Member Label (e.g. Ali)">
+          <input type="text" id="target-peer-id" placeholder="Peer Node ID (e.g. ali_node)">
+          <button id="btn-add-contact">+ Add to Mesh</button>
         </div>
 
-        <div class="contacts-header">Auto-Connecting Contacts</div>
-        <ul id="contacts-list" class="contacts-list">
-          <!-- Contacts dynamically loaded here -->
-        </ul>
+        <div class="contacts-header">Connected Mesh Nodes</div>
+        <ul id="contacts-list" class="contacts-list"></ul>
       </div>
 
-      <!-- Guest mode message -->
+      <!-- Guest Mode -->
       <div id="guest-message" class="guest-panel">
-        <p>🔒 End-to-End Encrypted Terminal</p>
+        <div class="e2ee-badge">🔒 End-to-End Mesh Encrypted</div>
+        <p>Zero-Knowledge Architecture. No middle server stores your data.</p>
         <div class="auto-pulse-box">
           <span class="pulse-dot"></span>
-          <small id="guest-status-text">Scanning for Admin (PC / Laptop)...</small>
+          <small id="guest-status-text">Scanning for Admin Nodes...</small>
         </div>
       </div>
     </aside>
 
-    <!-- RIGHT MAIN: Chat Window -->
+    <!-- MAIN CHAT -->
     <main class="chat-area">
-      <div class="chat-header">
-        <div>
-          <h3 id="current-contact-name">Ghost Terminal</h3>
-          <span id="connection-status" class="status-offline">● Auto-Searching...</span>
+      <header class="chat-header">
+        <div class="header-info">
+          <div class="title-row">
+            <h3 id="current-contact-name">Mesh Channel</h3>
+            <span id="latency-badge" class="latency-badge hidden">⚡ -- ms</span>
+          </div>
+          <span id="connection-status" class="status-offline">● Auto-Searching Mesh...</span>
         </div>
+        
         <div class="header-actions">
           <button id="btn-start-call" class="btn-action" disabled>📞 Live Call</button>
-          <button id="btn-screen-share" class="btn-action" disabled>🖥️ Share Screen</button>
+          <button id="btn-screen-share" class="btn-action" disabled>🖥️ Studio Share</button>
         </div>
-      </div>
+      </header>
 
-      <!-- Messages Display -->
+      <!-- Messages View -->
       <div id="messages-container" class="messages-container">
-        <div class="empty-state">Waiting for peer to come online. Will auto-connect instantly!</div>
+        <div class="empty-state">Mesh channel idle. P2P links establish automatically upon peer boot.</div>
       </div>
 
-      <!-- Chat Input Area -->
+      <!-- Live Typing Bar -->
+      <div id="typing-indicator" class="typing-indicator hidden">
+        <span class="dots"><span></span><span></span><span></span></span>
+        <span id="typing-user-text">Peer is typing...</span>
+      </div>
+
+      <!-- Quick Emoji Bar -->
+      <div class="quick-emoji-bar">
+        <span class="q-emoji" data-emoji="😀">😀</span>
+        <span class="q-emoji" data-emoji="🔥">🔥</span>
+        <span class="q-emoji" data-emoji="🚀">🚀</span>
+        <span class="q-emoji" data-emoji="💻">💻</span>
+        <span class="q-emoji" data-emoji="👍">👍</span>
+        <span class="q-emoji" data-emoji="❤️">❤️</span>
+      </div>
+
+      <!-- Input Bar -->
       <form id="chat-form" class="chat-input-bar">
-        <label for="file-input" class="btn-file">📎</label>
+        <label for="file-input" class="btn-file" title="Upload Media">📎</label>
         <input type="file" id="file-input" accept="image/*,video/*" style="display:none;">
         
-        <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" disabled>
+        <input type="text" id="message-input" placeholder="Type message or ```code```..." autocomplete="off" disabled>
         <button type="submit" id="btn-send" disabled>Send</button>
       </form>
     </main>
 
   </div>
 
-  <!-- CALL & SCREEN SHARE MODAL -->
+  <!-- STUDIO CALL & DUAL SCREEN SHARE MODAL -->
   <div id="call-modal" class="modal hidden">
-    <div class="modal-content">
-      <h3 id="call-status-title">Incoming Call...</h3>
-      
-      <div id="screen-wrapper" class="screen-video-wrapper hidden">
-        <video id="remote-screen-video" autoplay playsinline></video>
-        <button type="button" class="btn-fullscreen" onclick="toggleVideoFullscreen()">⛶ Fullscreen</button>
+    <div class="modal-content studio-modal">
+      <div class="studio-header">
+        <h3 id="call-status-title">P2P Collaboration Studio</h3>
+        <button id="btn-toggle-pip" class="btn-action">⛶ Pop-out / Fullscreen</button>
       </div>
       
-      <div class="live-call-box">
-        <h4>Live Real-time Call:</h4>
-        <div id="remote-live-text" class="live-text-stream">Waiting for typing...</div>
-        <input type="text" id="my-live-input" placeholder="Type here live...">
+      <!-- Studio Grid: Video + In-Call Chat Side-by-Side -->
+      <div class="studio-body">
+        <div id="screen-wrapper" class="studio-video-container">
+          <video id="remote-screen-video" autoplay playsinline></video>
+          <div id="no-video-placeholder" class="video-placeholder">
+            <span>📡 Stream Standby</span>
+          </div>
+        </div>
+
+        <!-- In-Call Real-Time Chat Drawer -->
+        <div class="studio-chat-drawer">
+          <div class="drawer-header">Studio Live Feed</div>
+          <div id="in-call-messages" class="studio-messages-log"></div>
+          
+          <div class="live-keystroke-box">
+            <small>Live Keystroke Stream:</small>
+            <div id="remote-live-text" class="live-stream-text">Listening...</div>
+          </div>
+          
+          <div class="studio-input-row">
+            <input type="text" id="my-live-input" placeholder="Live typing to stream...">
+          </div>
+        </div>
       </div>
 
-      <div class="modal-buttons">
-        <button id="btn-accept-call" class="btn-call-accept">Accept</button>
-        <button id="btn-end-call" class="btn-call-decline">End Call</button>
+      <div class="studio-footer">
+        <button id="btn-accept-call" class="btn-call-accept">Accept Session</button>
+        <button id="btn-end-call" class="btn-call-decline">Terminate Link</button>
       </div>
     </div>
   </div>
