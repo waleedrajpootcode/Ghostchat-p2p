@@ -36,7 +36,7 @@ document.getElementById('btn-copy-id').onclick = () => {
 const peer = new Peer(myId);
 let activeConn = null;
 let currentContactPeerId = null;
-let activeMediaCall = null;
+let activeCalls = {}; // Multi-call storage for Group Call
 let contacts = JSON.parse(localStorage.getItem('ghost_admin_contacts') || '[]');
 let latencyInterval = null;
 
@@ -47,24 +47,28 @@ let isCamOn = false;
 let mediaRecorder = null;
 let audioChunks = [];
 let isRecordingVoice = false;
+let isGroupCallActive = false;
 
 // --- 2. ADMIN LOCK UI ---
 const adminBtn = document.getElementById('btn-admin-toggle');
 const adminControls = document.getElementById('admin-controls');
 const guestMessage = document.getElementById('guest-message');
 const deviceBox = document.getElementById('device-selector-box');
+const groupCallBtn = document.getElementById('btn-group-call');
 
 function updateAdminUI() {
   if (isAdmin) {
     adminControls.classList.remove('hidden');
     guestMessage.classList.add('hidden');
     deviceBox.classList.remove('hidden');
+    groupCallBtn.classList.remove('hidden');
     adminBtn.textContent = "🔓 Admin Active";
     renderContacts();
   } else {
     adminControls.classList.add('hidden');
     guestMessage.classList.remove('hidden');
     deviceBox.classList.add('hidden');
+    groupCallBtn.classList.add('hidden');
     adminBtn.textContent = "🔒 Admin";
   }
 }
@@ -253,7 +257,7 @@ function updateOnlineUI(name) {
   statusEl.className = 'status-online';
   document.getElementById('current-contact-name').textContent = name;
   const guestStatus = document.getElementById('guest-status-text');
-  if (guestStatus) guestStatus.textContent = `Heterogeneous Link Established with ${name}`;
+  if (guestStatus) guestStatus.textContent = `Mesh Connected with ${name}`;
 }
 
 function getContactName(peerId) {
@@ -287,9 +291,9 @@ function handleIncomingData(data) {
     if (el) el.remove();
     deleteMessageLocally(data.msgId);
   } else if (data.type === 'call_ring') {
-    showIncomingCallUI();
+    showIncomingCallUI(data.isGroup);
   } else if (data.type === 'call_accepted') {
-    document.getElementById('call-status-title').textContent = "Adaptive Studio Live";
+    document.getElementById('call-status-title').textContent = data.isGroup ? "Group Mesh Active" : "Studio Session Live";
     document.getElementById('btn-accept-call').classList.add('hidden');
   } else if (data.type === 'call_ended') {
     closeCallModal();
@@ -311,7 +315,7 @@ function formatMessageContent(text) {
   return span;
 }
 
-// --- 7. CHAT, EMOJIS, FILES & VOICE NOTES ---
+// --- 7. CHAT, VOICE NOTES & EXTENDED EMOJI PICKER ---
 const msgInput = document.getElementById('message-input');
 let typingTimeout = null;
 
@@ -330,13 +334,53 @@ function handleTypingIndicator(isTyping) {
   else el.classList.add('hidden');
 }
 
-document.querySelectorAll('.q-emoji').forEach(emoji => {
-  emoji.onclick = () => {
-    msgInput.value += emoji.getAttribute('data-emoji');
-    msgInput.focus();
+// 60+ Extended Emoji Dataset
+const EMOJI_DATA = {
+  smileys: ['😀','😃','😄','😁','😆','😅','😂','🤣','🥲','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','🥴','😵','🤯','🤠','🥳','🥸','😎','🤓','🧐'],
+  gestures: ['👍','👎','👊','✊','🤛','🤜','🤞','✌️','🤟','🤘','👌','🤌','🤏','👈','👉','👆','👇','☝️','✋','🤚','🖐️','🖖','👋','🤙','💪','🦾','🖕','✍️','🙏','🤝','👏','🙌','👐','🤲'],
+  hearts: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','❤️‍🩹','❣️','💕','💞','💓','💗','💖','💘','💝','💟','🔥','✨','💥','💯','💢'],
+  tech: ['💻','🖥️','📱','⌨️','🖱️','🖨️','📷','🎥','📽️','🎙️','🎧','📡','🚀','🛸','⚡','🔋','💡','🕹️','🎮','🤖','🔒','🔑','📦','☕']
+};
+
+const emojiPanel = document.getElementById('emoji-picker-panel');
+const emojiGrid = document.getElementById('emoji-grid-content');
+
+document.getElementById('btn-toggle-emoji').onclick = (e) => {
+  e.stopPropagation();
+  emojiPanel.classList.toggle('hidden');
+  renderEmojiCategory('smileys');
+};
+
+document.querySelectorAll('.emoji-tabs .tab').forEach(tab => {
+  tab.onclick = () => {
+    document.querySelectorAll('.emoji-tabs .tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    renderEmojiCategory(tab.dataset.cat);
   };
 });
 
+function renderEmojiCategory(cat) {
+  emojiGrid.innerHTML = '';
+  const list = EMOJI_DATA[cat] || [];
+  list.forEach(em => {
+    const s = document.createElement('span');
+    s.className = 'emoji-item';
+    s.textContent = em;
+    s.onclick = () => {
+      msgInput.value += em;
+      msgInput.focus();
+    };
+    emojiGrid.appendChild(s);
+  });
+}
+
+document.body.addEventListener('click', (e) => {
+  if (!emojiPanel.contains(e.target) && e.target.id !== 'btn-toggle-emoji') {
+    emojiPanel.classList.add('hidden');
+  }
+});
+
+// Chat Send
 document.getElementById('chat-form').onsubmit = (e) => {
   e.preventDefault();
   const text = msgInput.value.trim();
@@ -368,7 +412,7 @@ document.getElementById('file-input').onchange = (e) => {
   reader.readAsDataURL(file);
 };
 
-// VOICE NOTE RECORDER (Microphone Push-to-Talk)
+// Voice Note Push-To-Talk
 const voiceBtn = document.getElementById('btn-voice-memo');
 voiceBtn.onclick = async () => {
   if (!activeConn) return;
@@ -443,7 +487,6 @@ function appendMessageUI(msgId, type, text, fileData = null, fileType = null, fi
   const actionsDiv = document.createElement('div');
   actionsDiv.className = 'msg-actions';
 
-  // 1-Click Download Link for Media
   if (fileData) {
     const dlBtn = document.createElement('a');
     dlBtn.className = 'btn-action-mini';
@@ -509,7 +552,7 @@ function showDeleteChoiceModal(msgId, msgDiv) {
   document.getElementById('opt-del-cancel').onclick = () => choiceModal.remove();
 }
 
-// --- 8. HETEROGENEOUS ADAPTIVE AV ENGINE ---
+// --- 8. ADAPTIVE AV & ADMIN GROUP MESH CALL ENGINE ---
 const ringtone = document.getElementById('ringtone');
 function playRingtone() { ringtone.play().catch(() => playLoudChime()); }
 function stopRingtone() { ringtone.pause(); ringtone.currentTime = 0; }
@@ -533,55 +576,128 @@ async function getAdaptiveMediaStream(wantAudio = false, wantVideo = false) {
   }
 }
 
+// 1-to-1 CALL
 document.getElementById('btn-start-call').onclick = async () => {
   if (!activeConn) return;
-  activeConn.send({ type: 'call_ring' });
+  isGroupCallActive = false;
+  activeConn.send({ type: 'call_ring', isGroup: false });
   document.getElementById('call-modal').classList.remove('hidden');
   document.getElementById('call-status-title').textContent = "Pinging Peer Node...";
   document.getElementById('btn-accept-call').classList.add('hidden');
 
   localStream = await getAdaptiveMediaStream(true, false);
   updateHardwareStatusPill();
-  activeMediaCall = peer.call(activeConn.peer, localStream);
-  bindCallEvents(activeMediaCall);
+  const call = peer.call(activeConn.peer, localStream);
+  bindCallEvents(call, activeConn.peer);
 };
 
-function showIncomingCallUI() {
+// ADMIN GROUP CALL (Mesh Engine)
+document.getElementById('btn-group-call').onclick = async () => {
+  if (!isAdmin || contacts.length === 0) {
+    return alert("Add contacts to your Mesh before initiating a Group Call!");
+  }
+  isGroupCallActive = true;
+  document.getElementById('call-modal').classList.remove('hidden');
+  document.getElementById('call-status-title').textContent = "Dialing Group Mesh...";
+  document.getElementById('btn-accept-call').classList.add('hidden');
+  document.getElementById('group-participants-count').classList.remove('hidden');
+  document.getElementById('group-participants-count').textContent = `👥 Dialing ${contacts.length} Peers...`;
+
+  localStream = await getAdaptiveMediaStream(true, false);
+  updateHardwareStatusPill();
+
+  // Dial all contacts in parallel
+  contacts.forEach(contact => {
+    try {
+      const conn = peer.connect(contact.id, { reliable: true });
+      conn.on('open', () => conn.send({ type: 'call_ring', isGroup: true }));
+      const call = peer.call(contact.id, localStream);
+      bindCallEvents(call, contact.id, contact.name);
+    } catch(err) {
+      console.warn("Failed dialing node:", contact.id);
+    }
+  });
+};
+
+function showIncomingCallUI(isGroup = false) {
   playRingtone();
   const name = getContactName(activeConn.peer) || activeConn.peer;
-  sendDesktopNotification("Adaptive Session Request", `${name} is calling!`);
+  sendDesktopNotification("Incoming Call", `${name} is calling ${isGroup ? '(Group Session)' : ''}!`);
   document.getElementById('call-modal').classList.remove('hidden');
-  document.getElementById('call-status-title').textContent = "Incoming Call from " + name;
+  document.getElementById('call-status-title').textContent = isGroup ? "Incoming Group Call from " + name : "Incoming Call from " + name;
   document.getElementById('btn-accept-call').classList.remove('hidden');
 }
 
 document.getElementById('btn-accept-call').onclick = async () => {
   stopRingtone();
-  activeConn.send({ type: 'call_accepted' });
-  document.getElementById('call-status-title').textContent = "Adaptive Studio Live";
+  activeConn.send({ type: 'call_accepted', isGroup: isGroupCallActive });
+  document.getElementById('call-status-title').textContent = isGroupCallActive ? "Group Mesh Live" : "Adaptive Studio Live";
   document.getElementById('btn-accept-call').classList.add('hidden');
 
   localStream = await getAdaptiveMediaStream(true, false);
   updateHardwareStatusPill();
-  if (activeMediaCall) {
-    activeMediaCall.answer(localStream);
-  }
+  Object.values(activeCalls).forEach(call => {
+    try { call.answer(localStream); } catch(e){}
+  });
 };
 
 peer.on('call', async (call) => {
-  activeMediaCall = call;
-  bindCallEvents(call);
+  activeCalls[call.peer] = call;
+  bindCallEvents(call, call.peer);
 });
 
-function bindCallEvents(call) {
+function bindCallEvents(call, peerId, peerName = null) {
+  activeCalls[peerId] = call;
+
   call.on('stream', (remoteStream) => {
-    const video = document.getElementById('remote-stream-video');
-    video.srcObject = remoteStream;
-    video.muted = false;
+    addStreamToVideoGrid(peerId, remoteStream, peerName || getContactName(peerId) || peerId);
     document.getElementById('call-modal').classList.remove('hidden');
-    document.getElementById('call-status-title').textContent = "Studio Session Live";
-    updateHardwareStatusPill();
+    updateGroupCountPill();
   });
+
+  call.on('close', () => {
+    removeStreamFromVideoGrid(peerId);
+    delete activeCalls[peerId];
+    updateGroupCountPill();
+  });
+}
+
+function addStreamToVideoGrid(peerId, stream, label) {
+  let card = document.getElementById(`card-${peerId}`);
+  if (!card) {
+    card = document.createElement('div');
+    card.className = 'video-card';
+    card.id = `card-${peerId}`;
+
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.playsInline = true;
+    video.srcObject = stream;
+    video.muted = false;
+
+    const span = document.createElement('span');
+    span.className = 'video-label';
+    span.textContent = `${label} (Live)`;
+
+    card.appendChild(video);
+    card.appendChild(span);
+    document.getElementById('video-grid').appendChild(card);
+  } else {
+    const video = card.querySelector('video');
+    video.srcObject = stream;
+  }
+}
+
+function removeStreamFromVideoGrid(peerId) {
+  const card = document.getElementById(`card-${peerId}`);
+  if (card) card.remove();
+}
+
+function updateGroupCountPill() {
+  const count = Object.keys(activeCalls).length + 1; // peers + me
+  const pill = document.getElementById('group-participants-count');
+  pill.textContent = `👥 ${count} in Session`;
+  pill.classList.remove('hidden');
 }
 
 function updateHardwareStatusPill() {
@@ -590,7 +706,7 @@ function updateHardwareStatusPill() {
     pill.textContent = "🎙️ Mic Active";
     pill.style.color = "#3fb950";
   } else {
-    pill.textContent = "🔇 No Mic (Text & AV Output Only)";
+    pill.textContent = "🔇 No Mic (Output Mode)";
     pill.style.color = "#58a6ff";
   }
 }
@@ -601,15 +717,17 @@ document.getElementById('btn-toggle-mic').onclick = async () => {
     try {
       const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const audioTrack = micStream.getAudioTracks()[0];
-      if (activeMediaCall && activeMediaCall.peerConnection) {
-        const sender = activeMediaCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'audio');
-        if (sender) sender.replaceTrack(audioTrack);
-      }
+      Object.values(activeCalls).forEach(call => {
+        if (call.peerConnection) {
+          const sender = call.peerConnection.getSenders().find(s => s.track && s.track.kind === 'audio');
+          if (sender) sender.replaceTrack(audioTrack);
+        }
+      });
       isMicOn = true;
       btn.textContent = "🎙️ Mic: ON";
       btn.classList.add('active');
     } catch(e) {
-      alert("No Microphone detected on this device. Text participation active!");
+      alert("No Microphone detected on this device. Output & text mode active!");
     }
   } else {
     isMicOn = false;
@@ -621,7 +739,6 @@ document.getElementById('btn-toggle-mic').onclick = async () => {
 
 document.getElementById('btn-toggle-cam').onclick = async () => {
   const btn = document.getElementById('btn-toggle-cam');
-  const previewCard = document.getElementById('local-preview-card');
   const localVideo = document.getElementById('local-stream-video');
 
   if (!isCamOn) {
@@ -629,24 +746,24 @@ document.getElementById('btn-toggle-cam').onclick = async () => {
       const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
       const videoTrack = camStream.getVideoTracks()[0];
       localVideo.srcObject = camStream;
-      previewCard.classList.remove('hidden');
 
-      if (activeMediaCall && activeMediaCall.peerConnection) {
-        const sender = activeMediaCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-        if (sender) sender.replaceTrack(videoTrack);
-        else activeMediaCall.peerConnection.addTrack(videoTrack, camStream);
-      }
+      Object.values(activeCalls).forEach(call => {
+        if (call.peerConnection) {
+          const sender = call.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (sender) sender.replaceTrack(videoTrack);
+          else call.peerConnection.addTrack(videoTrack, camStream);
+        }
+      });
       isCamOn = true;
       btn.textContent = "📷 Cam: ON";
       btn.classList.add('active');
     } catch(e) {
-      alert("No Camera device found on this system.");
+      alert("No Camera device detected on this system.");
     }
   } else {
     isCamOn = false;
     btn.textContent = "📷 Cam: Off";
     btn.classList.remove('active');
-    previewCard.classList.add('hidden');
     if (localVideo.srcObject) {
       localVideo.srcObject.getTracks().forEach(t => t.stop());
       localVideo.srcObject = null;
@@ -655,7 +772,7 @@ document.getElementById('btn-toggle-cam').onclick = async () => {
 };
 
 async function triggerScreenShareWithAudio() {
-  if (!activeConn) return;
+  if (!activeConn && Object.keys(activeCalls).length === 0) return;
   try {
     const displayStream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
@@ -665,15 +782,27 @@ async function triggerScreenShareWithAudio() {
     document.getElementById('call-modal').classList.remove('hidden');
     document.getElementById('call-status-title').textContent = "Broadcasting Display + Audio...";
 
-    activeMediaCall = peer.call(activeConn.peer, displayStream);
-    bindCallEvents(activeMediaCall);
+    const localVideo = document.getElementById('local-stream-video');
+    localVideo.srcObject = displayStream;
+
+    Object.values(activeCalls).forEach(call => {
+      if (call.peerConnection) {
+        const videoTrack = displayStream.getVideoTracks()[0];
+        const audioTrack = displayStream.getAudioTracks()[0];
+        const vSender = call.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (vSender) vSender.replaceTrack(videoTrack);
+        else call.peerConnection.addTrack(videoTrack, displayStream);
+        if (audioTrack) {
+          const aSender = call.peerConnection.getSenders().find(s => s.track && s.track.kind === 'audio');
+          if (aSender) aSender.replaceTrack(audioTrack);
+        }
+      }
+    });
 
     displayStream.getVideoTracks()[0].onended = () => {
-      document.getElementById('call-status-title').textContent = "Screen Share Stopped";
+      document.getElementById('call-status-title').textContent = "Screen Share Concluded";
     };
-  } catch (err) {
-    console.warn("Screen share cancelled:", err);
-  }
+  } catch (err) {}
 }
 
 document.getElementById('btn-screen-share').onclick = triggerScreenShareWithAudio;
@@ -688,12 +817,20 @@ document.getElementById('btn-end-call').onclick = () => {
 function closeCallModal() {
   stopRingtone();
   document.getElementById('call-modal').classList.add('hidden');
-  const video = document.getElementById('remote-stream-video');
-  video.srcObject = null;
+  document.getElementById('group-participants-count').classList.add('hidden');
+
+  const grid = document.getElementById('video-grid');
+  grid.querySelectorAll('.video-card:not(#local-preview-card)').forEach(c => c.remove());
+
   const localVideo = document.getElementById('local-stream-video');
   if (localVideo.srcObject) localVideo.srcObject.getTracks().forEach(t => t.stop());
   if (localStream) localStream.getTracks().forEach(t => t.stop());
-  if (activeMediaCall) activeMediaCall.close();
+
+  Object.values(activeCalls).forEach(c => {
+    try { c.close(); } catch(e){}
+  });
+  activeCalls = {};
+  isGroupCallActive = false;
 }
 
 document.getElementById('my-live-input').oninput = (e) => {
