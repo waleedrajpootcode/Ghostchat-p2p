@@ -232,7 +232,6 @@ body {
   gap: 12px;
 }
 
-/* CODE BLOCKS & MESSAGE BUBBLE */
 .msg {
   max-width: 65%;
   min-width: 150px;
@@ -261,12 +260,10 @@ body {
 }
 
 .msg img, .msg video { max-width: 100%; max-height: 320px; border-radius: 6px; margin-top: 6px; }
-
 .msg-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 10px; color: #8b949e; }
 .btn-del-msg { background: transparent; border: none; cursor: pointer; color: #8b949e; font-size: 11px; }
 .btn-del-msg:hover { color: #f87171; }
 
-/* TYPING INDICATOR */
 .typing-indicator {
   padding: 6px 20px;
   font-size: 12px;
@@ -290,7 +287,6 @@ body {
   40% { transform: scale(1); }
 }
 
-/* QUICK EMOJI BAR */
 .quick-emoji-bar {
   display: flex;
   gap: 12px;
@@ -301,7 +297,6 @@ body {
 .q-emoji { cursor: pointer; font-size: 16px; transition: transform 0.15s; }
 .q-emoji:hover { transform: scale(1.3); }
 
-/* INPUT BAR */
 .chat-input-bar {
   padding: 12px 20px;
   background: #161b22;
@@ -335,30 +330,104 @@ body {
 .btn-file { font-size: 20px; cursor: pointer; color: #8b949e; }
 .btn-file:hover { color: #58a6ff; }
 
-/* STUDIO MODAL: SPLIT SCREEN FOR SCREEN + IN-CALL CHAT */
+/* ADAPTIVE STUDIO MODAL */
 .studio-modal {
-  width: 95vw;
-  max-width: 1200px;
-  height: 85vh;
+  width: 96vw;
+  max-width: 1280px;
+  height: 88vh;
   display: flex;
   flex-direction: column;
 }
+
 .studio-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.studio-title-group { display: flex; align-items: center; gap: 12px; }
+.media-status-pill {
+  background: #23863622;
+  color: #3fb950;
+  border: 1px solid #23863655;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .studio-body { display: flex; flex: 1; gap: 16px; overflow: hidden; }
 
-.studio-video-container {
-  flex: 2.2;
-  background: #000;
+/* VIDEO GRID & TOOLBAR */
+.studio-stream-area {
+  flex: 2.3;
+  display: flex;
+  flex-direction: column;
+  background: #010409;
+  border: 1px solid #30363d;
   border-radius: 8px;
+  overflow: hidden;
+}
+
+.video-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 8px;
+  padding: 8px;
+  background: #000;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-card {
   position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 220px;
+  background: #0d1117;
+  border-radius: 6px;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-#remote-screen-video { width: 100%; height: 100%; object-fit: contain; }
-.video-placeholder { color: #8b949e; font-size: 16px; font-weight: 600; }
 
+.video-card video { width: 100%; height: 100%; object-fit: contain; }
+
+.video-label {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(13, 17, 23, 0.8);
+  color: #c9d1d9;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid #30363d;
+}
+
+.studio-control-toolbar {
+  height: 52px;
+  background: #161b22;
+  border-top: 1px solid #30363d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 0 16px;
+}
+
+.tool-btn {
+  background: #21262d;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.tool-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+.tool-btn.active { background: #238636; color: #fff; border-color: #2ea043; }
+
+/* STUDIO CHAT DRAWER */
 .studio-chat-drawer {
   flex: 1;
   background: #0d1117;
@@ -368,7 +437,7 @@ body {
   flex-direction: column;
   padding: 12px;
 }
-.drawer-header { font-size: 12px; color: #8b949e; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
+.drawer-header { font-size: 11px; color: #8b949e; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
 .studio-messages-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
 .studio-msg-item {
   font-size: 12px;
@@ -404,11 +473,10 @@ body {
 .btn-call-accept { background: #238636; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 600; }
 .btn-call-decline { background: #da3633; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 600; }
 
-/* MODAL CONTAINER */
 .modal {
   position: fixed;
   inset: 0;
-  background: rgba(1, 4, 9, 0.88);
+  background: rgba(1, 4, 9, 0.9);
   backdrop-filter: blur(6px);
   display: flex;
   justify-content: center;
@@ -423,3 +491,11 @@ body {
 .btn-del-for-all { background: #da3633; color: #fff; }
 .btn-del-for-me { background: #21262d; color: #c9d1d9; }
 .btn-del-cancel { background: transparent; color: #8b949e; border: 1px solid #30363d; }
+
+/* MOBILE RESPONSIVE BREAKPOINT */
+@media (max-width: 768px) {
+  .app-container { flex-direction: column; }
+  .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid #21262d; }
+  .studio-body { flex-direction: column; }
+  .studio-modal { width: 100vw; height: 100vh; max-width: none; border-radius: 0; }
+}
