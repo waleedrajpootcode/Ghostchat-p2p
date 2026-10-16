@@ -20,7 +20,7 @@
     <aside class="sidebar" id="sidebar">
       <div class="my-profile">
         <div class="brand-row">
-          <h3>Ghost<span class="highlight">Node</span> <small class="saas-badge">v4.5 Pro</small></h3>
+          <h3>Ghost<span class="highlight">Node</span> <small class="saas-badge">v5.0 Ultra</small></h3>
           <button id="btn-admin-toggle" class="btn-pin">🔒 Admin</button>
         </div>
         
@@ -53,11 +53,11 @@
 
       <!-- Guest Mode -->
       <div id="guest-message" class="guest-panel">
-        <div class="e2ee-badge">🔒 Direct Mesh Active</div>
-        <p>100% P2P Serverless Tunnel. No intermediate database.</p>
+        <div class="e2ee-badge">🔒 Heavy P2P Engine Active</div>
+        <p>Zero-server direct tunnel. Messages queue offline and auto-deliver on connect.</p>
         <div class="auto-pulse-box">
           <span class="pulse-dot"></span>
-          <small id="guest-status-text">Scanning for Admin Nodes...</small>
+          <small id="guest-status-text">Scanning for Admin (PC / Laptop)...</small>
         </div>
       </div>
     </aside>
@@ -67,7 +67,7 @@
       <header class="chat-header">
         <div class="header-info">
           <div class="title-row">
-            <h3 id="current-contact-name">Direct Channel</h3>
+            <h3 id="current-contact-name">Direct P2P Channel</h3>
             <span id="latency-badge" class="latency-badge hidden">⚡ -- ms</span>
             <span id="e2ee-fingerprint" class="e2ee-hash-badge hidden">🔒 E2EE: Ready</span>
           </div>
@@ -83,7 +83,7 @@
 
       <!-- Messages View -->
       <div id="messages-container" class="messages-container">
-        <div class="empty-state">Mesh link idle. Open this web app on both devices to auto-connect!</div>
+        <div class="empty-state">Mesh link ready. Type message anytime; it will auto-send on connect!</div>
       </div>
 
       <!-- Live Typing Bar -->
@@ -103,7 +103,7 @@
         <div id="emoji-grid-content" class="emoji-grid-content"></div>
       </div>
 
-      <!-- Input Bar -->
+      <!-- Input Bar (Kabhi Disable Nahi Hoga - Always Ready) -->
       <form id="chat-form" class="chat-input-bar">
         <label for="file-input" class="btn-file" title="Send Media">📎</label>
         <input type="file" id="file-input" accept="image/*,video/*,audio/*" style="display:none;">
@@ -111,8 +111,8 @@
         <button type="button" id="btn-toggle-emoji" class="btn-emoji-toggle" title="Emojis">😊</button>
         <button type="button" id="btn-voice-memo" class="btn-voice-note" title="Record Voice Note">🎙️</button>
 
-        <input type="text" id="message-input" placeholder="Type message or ```code```..." autocomplete="off" disabled>
-        <button type="submit" id="btn-send" disabled>Send</button>
+        <input type="text" id="message-input" placeholder="Type message (Auto-queues if offline)..." autocomplete="off">
+        <button type="submit" id="btn-send">Send</button>
       </form>
     </main>
 
@@ -136,10 +136,7 @@
       
       <div class="studio-body">
         
-        <!-- Video Stream View -->
         <div class="studio-stream-area">
-          
-          <!-- Live Floating Screen-Share HUD (Overlay on top of video) -->
           <div id="screen-hud-overlay" class="screen-hud-overlay">
             <span class="hud-badge">💬 Live Screen Overlay:</span>
             <span id="hud-latest-text" class="hud-text">Waiting for messages...</span>
@@ -158,7 +155,6 @@
             </div>
           </div>
 
-          <!-- Bottom AV Controls -->
           <div class="studio-control-toolbar">
             <button id="btn-toggle-mic" class="tool-btn" title="Toggle Mic">🎙️ Mic: Off</button>
             <button id="btn-toggle-cam" class="tool-btn" title="Toggle Camera">📷 Cam: Off</button>
@@ -167,7 +163,6 @@
           </div>
         </div>
 
-        <!-- In-Call Real-Time Chat Drawer -->
         <div class="studio-chat-drawer">
           <div class="drawer-header">Live In-Call Keystrokes & Chat</div>
           <div id="in-call-messages" class="studio-messages-log"></div>

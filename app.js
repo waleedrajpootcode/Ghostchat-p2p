@@ -33,16 +33,35 @@ document.getElementById('btn-copy-id').onclick = () => {
   alert("Node ID Copied!");
 };
 
-// HIGH-AVAILABILITY MULTI-STUN PEER INITIALIZATION
+// --- 2. PEER INIT WITH TURN (NAT TRAVERSAL) ---
 const peer = new Peer(myId, {
   config: {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:global.stun.twilio.com:3478' }
-    ]
-  }
+      { urls: 'stun:global.stun.twilio.com:3478' },
+      // 🔥 TURN servers — internet / NAT ke liye ZAROORI
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      }
+    ],
+    iceCandidatePoolSize: 10,
+    sdpSemantics: 'unified-plan'
+  },
+  debug: 1
 });
 
 let activeConn = null;
@@ -60,7 +79,46 @@ let audioChunks = [];
 let isRecordingVoice = false;
 let isGroupCallActive = false;
 
-// --- 2. ADMIN LOCK UI ---
+// 📬 OFFLINE MESSAGE QUEUE
+let pendingMessages = JSON.parse(localStorage.getItem('ghost_pending_msgs') || '[]');
+
+function queueOrSend(payload) {
+  if (activeConn && activeConn.open) {
+    try { activeConn.send(payload); return true; } catch(e) {}
+  }
+  pendingMessages.push(payload);
+  localStorage.setItem('ghost_pending_msgs', JSON.stringify(pendingMessages));
+  return false;
+}
+
+function flushPendingMessages() {
+  if (!activeConn || !activeConn.open) return;
+  if (pendingMessages.length === 0) return;
+  const toSend = [...pendingMessages];
+  pendingMessages = [];
+  toSend.forEach(msg => {
+    try { activeConn.send(msg); } catch(e){ pendingMessages.push(msg); }
+  });
+  localStorage.setItem('ghost_pending_msgs', JSON.stringify(pendingMessages));
+}
+
+// 🔁 SIGNALING AUTO-RECONNECT + ERROR HANDLING
+peer.on('disconnected', () => {
+  setTimeout(() => { try { peer.reconnect(); } catch(e) { location.reload(); } }, 1500);
+});
+
+peer.on('error', (err) => {
+  console.warn('Peer error:', err.type, err.message);
+  if (err.type === 'unavailable-id') {
+    localStorage.removeItem('ghost_my_id');
+    setTimeout(() => location.reload(), 800);
+  }
+  if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error') {
+    setTimeout(() => { try { peer.reconnect(); } catch(e){} }, 3000);
+  }
+});
+
+// --- 3. ADMIN LOCK UI ---
 const adminBtn = document.getElementById('btn-admin-toggle');
 const adminControls = document.getElementById('admin-controls');
 const guestMessage = document.getElementById('guest-message');
@@ -105,7 +163,7 @@ adminBtn.onclick = () => {
   }
 };
 
-// --- 3. INDEXEDDB SETUP (VERSION 7) ---
+// --- 4. INDEXEDDB SETUP ---
 let db;
 const dbReq = indexedDB.open('GhostChatDB', 7);
 dbReq.onupgradeneeded = (e) => {
@@ -143,7 +201,7 @@ function loadContactMessages(contactId) {
   };
 }
 
-// --- 4. AUDIO NOTIFICATIONS ---
+// --- 5. AUDIO NOTIFICATIONS ---
 function playLoudChime() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -177,39 +235,77 @@ function sendDesktopNotification(title, body) {
   }
 }
 
-// --- 5. ZERO-CLICK AUTO ENGINE & LATENCY ---
+// --- 6. SMART AUTO-CONNECT ENGINE ---
 peer.on('open', (id) => {
-  console.log('GhostNode Ready:', id);
-  startAutoConnectEngine();
+  console.log('✅ GhostNode Ready:', id);
+  attemptConnectAll();
+  setInterval(attemptConnectAll, 3000);
 });
 
 peer.on('connection', (conn) => setupConnection(conn));
 
-function startAutoConnectEngine() {
-  setInterval(() => {
-    if (activeConn && activeConn.open) return;
+const connectingTo = {};
+let lastConnectedPeer = null;
 
-    if (isAdmin) {
-      contacts.forEach(contact => {
-        if (!activeConn || !activeConn.open) silentConnect(contact.id, contact.name);
-      });
-    } else {
-      ['admin_pc', 'admin_laptop'].forEach(adminId => {
-        if (!activeConn || !activeConn.open) silentConnect(adminId, "Orchestrator");
-      });
-    }
-  }, 2500);
+function attemptConnectAll() {
+  if (activeConn && activeConn.open) return;
+
+  if (isAdmin) {
+    if (contacts.length === 0) return;
+    contacts.forEach(contact => silentConnect(contact.id, contact.name));
+  } else {
+    silentConnect('admin_pc', 'Admin PC');
+    silentConnect('admin_laptop', 'Admin Laptop');
+  }
 }
 
 function silentConnect(targetId, targetName) {
+  if (!targetId || targetId === myId) return;
+  if (activeConn && activeConn.open && activeConn.peer === targetId) return;
+  if (connectingTo[targetId]) return;
+
+  connectingTo[targetId] = true;
+
+  let conn;
   try {
-    const conn = peer.connect(targetId, { reliable: true });
-    setupConnection(conn, targetName);
-  } catch(e) {}
+    conn = peer.connect(targetId, { reliable: true, serialization: 'json' });
+  } catch(e) {
+    delete connectingTo[targetId];
+    return;
+  }
+
+  const timeout = setTimeout(() => {
+    delete connectingTo[targetId];
+    try { conn.close(); } catch(e) {}
+  }, 8000);
+
+  conn.on('open', () => {
+    clearTimeout(timeout);
+    delete connectingTo[targetId];
+    lastConnectedPeer = targetId;
+  });
+
+  conn.on('error', () => {
+    clearTimeout(timeout);
+    delete connectingTo[targetId];
+  });
+
+  setupConnection(conn, targetName);
 }
 
 function setupConnection(conn, customName = null) {
   conn.on('open', () => {
+    // Duplicate connection resolve — chhota ID wins
+    if (activeConn && activeConn.open && activeConn.peer !== conn.peer) {
+      const keepMine = myId < conn.peer;
+      if (keepMine) {
+        try { conn.close(); } catch(e){}
+        return;
+      } else {
+        try { activeConn.close(); } catch(e){}
+      }
+    }
+
     activeConn = conn;
     currentContactPeerId = conn.peer;
 
@@ -222,6 +318,10 @@ function setupConnection(conn, customName = null) {
     loadContactMessages(conn.peer);
     if (isAdmin) renderContacts();
 
+    const emptyEl = document.querySelector('.empty-state');
+    if (emptyEl) emptyEl.remove();
+
+    flushPendingMessages();
     startLatencyTracker();
     generateE2EEFingerprint(myId, conn.peer);
   });
@@ -229,13 +329,15 @@ function setupConnection(conn, customName = null) {
   conn.on('data', (data) => handleIncomingData(data));
 
   conn.on('close', () => {
-    document.getElementById('connection-status').textContent = '● Scanning Mesh...';
-    document.getElementById('connection-status').className = 'status-offline';
-    document.getElementById('latency-badge').classList.add('hidden');
-    document.getElementById('e2ee-fingerprint').classList.add('hidden');
-    clearInterval(latencyInterval);
-    toggleInputs(false);
-    activeConn = null;
+    if (activeConn === conn) {
+      document.getElementById('connection-status').textContent = '● Scanning Mesh...';
+      document.getElementById('connection-status').className = 'status-offline';
+      document.getElementById('latency-badge').classList.add('hidden');
+      document.getElementById('e2ee-fingerprint').classList.add('hidden');
+      clearInterval(latencyInterval);
+      activeConn = null;
+      setTimeout(attemptConnectAll, 800);
+    }
   });
 }
 
@@ -276,10 +378,10 @@ function getContactName(peerId) {
   return c ? c.name : null;
 }
 
-// --- 6. DATA INCOMING & SCREEN SHARE HUD SYNC ---
+// --- 7. DATA INCOMING ---
 function handleIncomingData(data) {
   if (data.type === 'ping') {
-    activeConn.send({ type: 'pong', t: data.t });
+    if (activeConn) activeConn.send({ type: 'pong', t: data.t });
   } else if (data.type === 'pong') {
     const latency = Math.round((Date.now() - data.t) / 2);
     document.getElementById('latency-badge').textContent = `⚡ ${latency} ms P2P`;
@@ -292,10 +394,7 @@ function handleIncomingData(data) {
     sendDesktopNotification("Node Message", data.text);
     appendMessageUI(data.msgId, 'received', data.text, null, null, null, data.timestamp);
     appendStudioMessage(getContactName(activeConn.peer) || 'Peer', data.text);
-    
-    // UPDATE FLOATING SCREEN HUD OVERLAY
     document.getElementById('hud-latest-text').textContent = `${getContactName(activeConn.peer) || 'Peer'}: ${data.text}`;
-    
     saveMessageLocally(data.msgId, activeConn.peer, activeConn.peer, data.text);
   } else if (data.type === 'file') {
     playLoudChime();
@@ -331,7 +430,7 @@ function formatMessageContent(text) {
   return span;
 }
 
-// --- 7. CHAT, VOICE NOTES & EMOJIS ---
+// --- 8. CHAT / EMOJI / VOICE ---
 const msgInput = document.getElementById('message-input');
 let typingTimeout = null;
 
@@ -340,7 +439,7 @@ msgInput.addEventListener('input', () => {
   activeConn.send({ type: 'typing_status', isTyping: true });
   clearTimeout(typingTimeout);
   typingTimeout = setTimeout(() => {
-    activeConn.send({ type: 'typing_status', isTyping: false });
+    if (activeConn) activeConn.send({ type: 'typing_status', isTyping: false });
   }, 1500);
 });
 
@@ -395,43 +494,46 @@ document.body.addEventListener('click', (e) => {
   }
 });
 
-// Chat Send
+// Chat Send — OFFLINE QUEUE SUPPORTED
 document.getElementById('chat-form').onsubmit = (e) => {
   e.preventDefault();
   const text = msgInput.value.trim();
-  if (!text || !activeConn) return;
+  if (!text) return;
 
   const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
   const timestamp = Date.now();
-  activeConn.send({ type: 'chat', text, msgId, timestamp });
+  const payload = { type: 'chat', text, msgId, timestamp };
+
+  const sentNow = queueOrSend(payload);
   appendMessageUI(msgId, 'sent', text, null, null, null, timestamp);
   appendStudioMessage('Me', text);
-  document.getElementById('hud-latest-text').textContent = `Me: ${text}`;
-  saveMessageLocally(msgId, activeConn.peer, myId, text);
+  document.getElementById('hud-latest-text').textContent = `Me: ${text}${sentNow ? '' : ' (queued)'}`;
+  saveMessageLocally(msgId, activeConn ? activeConn.peer : 'pending', myId, text);
   msgInput.value = '';
-  activeConn.send({ type: 'typing_status', isTyping: false });
+  if (activeConn) activeConn.send({ type: 'typing_status', isTyping: false });
 };
 
+// File Send — OFFLINE QUEUE SUPPORTED
 document.getElementById('file-input').onchange = (e) => {
   const file = e.target.files[0];
-  if (!file || !activeConn) return;
+  if (!file) return;
 
   const reader = new FileReader();
   reader.onload = () => {
     const fileData = reader.result;
     const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
     const timestamp = Date.now();
-    activeConn.send({ type: 'file', fileData, fileType: file.type, fileName: file.name, msgId, timestamp });
+    const payload = { type: 'file', fileData, fileType: file.type, fileName: file.name, msgId, timestamp };
+    queueOrSend(payload);
     appendMessageUI(msgId, 'sent', '', fileData, file.type, file.name, timestamp);
-    saveMessageLocally(msgId, activeConn.peer, myId, '', fileData, file.type, file.name);
+    saveMessageLocally(msgId, activeConn ? activeConn.peer : 'pending', myId, '', fileData, file.type, file.name);
   };
   reader.readAsDataURL(file);
 };
 
-// VOICE NOTE PUSH-TO-TALK (WITH COMPREHENSIVE PERMISSION HELPER)
+// Voice Note
 const voiceBtn = document.getElementById('btn-voice-memo');
 voiceBtn.onclick = async () => {
-  if (!activeConn) return;
   if (!isRecordingVoice) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -445,9 +547,10 @@ voiceBtn.onclick = async () => {
           const fileData = reader.result;
           const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
           const timestamp = Date.now();
-          activeConn.send({ type: 'file', fileData, fileType: 'audio/webm', fileName: 'VoiceMemo.webm', msgId, timestamp });
+          const payload = { type: 'file', fileData, fileType: 'audio/webm', fileName: 'VoiceMemo.webm', msgId, timestamp };
+          queueOrSend(payload);
           appendMessageUI(msgId, 'sent', '', fileData, 'audio/webm', 'VoiceMemo.webm', timestamp);
-          saveMessageLocally(msgId, activeConn.peer, myId, '', fileData, 'audio/webm', 'VoiceMemo.webm');
+          saveMessageLocally(msgId, activeConn ? activeConn.peer : 'pending', myId, '', fileData, 'audio/webm', 'VoiceMemo.webm');
         };
         reader.readAsDataURL(audioBlob);
         stream.getTracks().forEach(t => t.stop());
@@ -458,9 +561,9 @@ voiceBtn.onclick = async () => {
       voiceBtn.title = "Click to Stop & Send Voice Note";
     } catch(err) {
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        alert("⚠️ Microphone Permission Blocked!\nPlease open Chrome/Browser Settings -> Site Settings -> Microphone -> Allow for this site.");
+        alert("⚠️ Microphone Permission Blocked!\nBrowser Settings → Microphone → Allow.");
       } else {
-        alert("⚠️ No physical microphone available on this device.");
+        alert("⚠️ No microphone available.");
       }
     }
   } else {
@@ -499,7 +602,7 @@ function appendMessageUI(msgId, type, text, fileData = null, fileType = null, fi
   const footer = document.createElement('div');
   footer.className = 'msg-footer';
   const d = new Date(timestamp);
-  
+
   const timeSpan = document.createElement('span');
   timeSpan.textContent = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
   footer.appendChild(timeSpan);
@@ -572,12 +675,11 @@ function showDeleteChoiceModal(msgId, msgDiv) {
   document.getElementById('opt-del-cancel').onclick = () => choiceModal.remove();
 }
 
-// --- 8. REVOLUTIONARY ADAPTIVE AV ENGINE (SDP VIDEO GUARANTEE) ---
+// --- 9. CALLING ENGINE ---
 const ringtone = document.getElementById('ringtone');
 function playRingtone() { ringtone.play().catch(() => playLoudChime()); }
 function stopRingtone() { ringtone.pause(); ringtone.currentTime = 0; }
 
-// Generates Canvas Video Track so SDP OFFER ALWAYS INCLUDES VIDEO LINE
 function createSyntheticVideoStream() {
   const canvas = document.createElement('canvas');
   canvas.width = 320;
@@ -591,7 +693,6 @@ function createSyntheticVideoStream() {
   return canvas.captureStream(5);
 }
 
-// Generates Silent Audio Track for mic-less devices
 function createSilentAudioStream() {
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
   const osc = ctx.createOscillator();
@@ -603,11 +704,8 @@ function createSilentAudioStream() {
   return new MediaStream([track]);
 }
 
-// Master Adaptive Stream Acquisition
 async function getAdaptiveMediaStream(wantAudio = true, wantVideo = true) {
   let finalStream = new MediaStream();
-
-  // Try real hardware first
   try {
     const realStream = await navigator.mediaDevices.getUserMedia({
       audio: wantAudio,
@@ -615,31 +713,22 @@ async function getAdaptiveMediaStream(wantAudio = true, wantVideo = true) {
     });
     realStream.getTracks().forEach(t => finalStream.addTrack(t));
   } catch (err) {
-    console.warn("Direct AV hardware capture failed, trying audio fallback:", err);
     try {
       const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioStream.getTracks().forEach(t => finalStream.addTrack(t));
-    } catch (err2) {
-      console.warn("No physical mic accessible. Adding silent audio pipeline.");
-    }
+    } catch (err2) {}
   }
-
-  // Ensure Audio Track Exists in SDP
   if (finalStream.getAudioTracks().length === 0) {
     const silent = createSilentAudioStream();
     finalStream.addTrack(silent.getAudioTracks()[0]);
   }
-
-  // Ensure Video Track Exists in SDP (Guarantees remote mobile answerer can send video!)
   if (finalStream.getVideoTracks().length === 0) {
     const synthetic = createSyntheticVideoStream();
     finalStream.addTrack(synthetic.getVideoTracks()[0]);
   }
-
   return finalStream;
 }
 
-// 1-to-1 CALL
 document.getElementById('btn-start-call').onclick = async () => {
   if (!activeConn) return;
   isGroupCallActive = false;
@@ -659,7 +748,6 @@ document.getElementById('btn-start-call').onclick = async () => {
   bindCallEvents(call, activeConn.peer);
 };
 
-// ADMIN GROUP CALL
 document.getElementById('btn-group-call').onclick = async () => {
   if (!isAdmin || contacts.length === 0) {
     return alert("Add contacts before starting a Group Call!");
@@ -683,13 +771,10 @@ document.getElementById('btn-group-call').onclick = async () => {
   });
 };
 
-// IN-CALL "ADD PERSON" TO ONGOING SESSION
 document.getElementById('btn-in-call-add').onclick = async () => {
-  const targetId = prompt("Enter Node ID of the person you want to add to this active call:");
+  const targetId = prompt("Enter Node ID to add:");
   if (!targetId || targetId === myId) return;
-
   if (!localStream) localStream = await getAdaptiveMediaStream(true, true);
-
   try {
     const conn = peer.connect(targetId, { reliable: true });
     conn.on('open', () => conn.send({ type: 'call_ring', isGroup: true }));
@@ -697,7 +782,7 @@ document.getElementById('btn-in-call-add').onclick = async () => {
     bindCallEvents(call, targetId, targetId);
     alert(`Dialing Node ${targetId} into live session!`);
   } catch (err) {
-    alert("Could not connect to Node: " + err.message);
+    alert("Could not connect: " + err.message);
   }
 };
 
@@ -712,7 +797,7 @@ function showIncomingCallUI(isGroup = false) {
 
 document.getElementById('btn-accept-call').onclick = async () => {
   stopRingtone();
-  activeConn.send({ type: 'call_accepted', isGroup: isGroupCallActive });
+  if (activeConn) activeConn.send({ type: 'call_accepted', isGroup: isGroupCallActive });
   document.getElementById('call-status-title').textContent = isGroupCallActive ? "Group Mesh Live" : "Live Session Active";
   document.getElementById('btn-accept-call').classList.add('hidden');
 
@@ -728,11 +813,8 @@ document.getElementById('btn-accept-call').onclick = async () => {
   });
 };
 
-// AUTO-ANSWER SCREEN SHARE & INCOMING CALLS
 peer.on('call', async (call) => {
   activeCalls[call.peer] = call;
-  
-  // If call is already active (e.g. Screen Share or stream upgrade), auto-answer immediately
   if (!document.getElementById('call-modal').classList.contains('hidden')) {
     if (!localStream) localStream = await getAdaptiveMediaStream(true, false);
     call.answer(localStream);
@@ -746,17 +828,14 @@ function bindCallEvents(call, peerId, peerName = null) {
   call.on('stream', (remoteStream) => {
     const video = document.getElementById('remote-stream-video');
     const audio = document.getElementById('remote-audio-player');
-    
     video.srcObject = remoteStream;
     video.playsInline = true;
     video.muted = false;
     audio.srcObject = remoteStream;
-
     video.play().catch(e => {
       document.getElementById('btn-unmute-audio').classList.remove('hidden');
     });
     audio.play().catch(() => {});
-
     document.getElementById('call-modal').classList.remove('hidden');
     document.getElementById('call-status-title').textContent = "Live Session Active";
     document.getElementById('remote-stream-label').textContent = `${peerName || getContactName(peerId) || peerId} (Live Stream)`;
@@ -814,11 +893,7 @@ document.getElementById('btn-toggle-mic').onclick = async () => {
       btn.textContent = "🎙️ Mic: ON";
       btn.classList.add('active');
     } catch(e) {
-      if (e.name === 'NotAllowedError') {
-        alert("⚠️ Microphone permission denied in browser settings! Please allow microphone access in site settings.");
-      } else {
-        alert("⚠️ No physical microphone available on this device.");
-      }
+      alert("⚠️ Microphone unavailable or permission denied.");
     }
   } else {
     isMicOn = false;
@@ -831,16 +906,12 @@ document.getElementById('btn-toggle-mic').onclick = async () => {
 document.getElementById('btn-toggle-cam').onclick = async () => {
   const btn = document.getElementById('btn-toggle-cam');
   const localVideo = document.getElementById('local-stream-video');
-
   if (!isCamOn) {
     try {
-      const camStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user' }
-      });
+      const camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
       const videoTrack = camStream.getVideoTracks()[0];
       localVideo.srcObject = camStream;
       document.getElementById('local-preview-card').classList.remove('hidden');
-
       Object.values(activeCalls).forEach(call => {
         if (call.peerConnection) {
           const sender = call.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
@@ -852,7 +923,7 @@ document.getElementById('btn-toggle-cam').onclick = async () => {
       btn.textContent = "📷 Cam: ON";
       btn.classList.add('active');
     } catch(e) {
-      alert("⚠️ Camera hardware not available or permission denied.");
+      alert("⚠️ Camera unavailable or permission denied.");
     }
   } else {
     isCamOn = false;
@@ -867,22 +938,15 @@ document.getElementById('btn-toggle-cam').onclick = async () => {
   updateHardwareStatusPill();
 };
 
-// UNIVERSAL SCREEN SHARE (WORKS ON PC AND SUPPORTED MOBILE CHROME)
 async function triggerUniversalScreenShare() {
   if (!navigator.mediaDevices.getDisplayMedia) {
-    return alert("⚠️ Your browser does not support screen sharing. Please use modern Chrome on Desktop/Android.");
+    return alert("⚠️ Your browser doesn't support screen share. Use modern Chrome.");
   }
   if (!activeConn && Object.keys(activeCalls).length === 0) return;
-
   try {
-    const displayStream = await navigator.mediaDevices.getDisplayMedia({
-      video: true,
-      audio: true
-    });
-
+    const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
     document.getElementById('call-modal').classList.remove('hidden');
     document.getElementById('call-status-title').textContent = "Broadcasting Display Stream...";
-
     const localVideo = document.getElementById('local-stream-video');
     localVideo.srcObject = displayStream;
     document.getElementById('local-preview-card').classList.remove('hidden');
@@ -927,19 +991,14 @@ function closeCallModal() {
   stopRingtone();
   document.getElementById('call-modal').classList.add('hidden');
   document.getElementById('group-participants-count').classList.add('hidden');
-
   const remoteVideo = document.getElementById('remote-stream-video');
   const remoteAudio = document.getElementById('remote-audio-player');
   remoteVideo.srcObject = null;
   remoteAudio.srcObject = null;
-
   const localVideo = document.getElementById('local-stream-video');
   if (localVideo.srcObject) localVideo.srcObject.getTracks().forEach(t => t.stop());
   if (localStream) localStream.getTracks().forEach(t => t.stop());
-
-  Object.values(activeCalls).forEach(c => {
-    try { c.close(); } catch(e){}
-  });
+  Object.values(activeCalls).forEach(c => { try { c.close(); } catch(e){} });
   activeCalls = {};
   isGroupCallActive = false;
 }
@@ -955,20 +1014,17 @@ document.getElementById('btn-toggle-pip').onclick = () => {
   else document.exitFullscreen();
 };
 
-// --- 9. ADMIN CONTACTS & DELETE CONTACT ---
+// --- 10. ADMIN CONTACTS ---
 document.getElementById('btn-add-contact').onclick = () => {
   if (!isAdmin) return;
   const nameInput = document.getElementById('target-contact-name');
   const idInput = document.getElementById('target-peer-id');
   const name = nameInput.value.trim();
   const id = idInput.value.trim();
-
   if (!name || !id) return alert("Provide label and node ID!");
-
   const existing = contacts.find(c => c.id === id);
   if (existing) existing.name = name;
   else contacts.push({ name, id });
-
   localStorage.setItem('ghost_admin_contacts', JSON.stringify(contacts));
   renderContacts();
   silentConnect(id, name);
@@ -996,7 +1052,6 @@ function renderContacts() {
   contacts.forEach(contact => {
     const li = document.createElement('li');
     li.className = `contact-item ${contact.id === currentContactPeerId ? 'active' : ''}`;
-    
     li.innerHTML = `
       <div class="contact-info" onclick="silentConnect('${contact.id}', '${contact.name}')">
         <span class="c-name">${contact.name}</span>
@@ -1008,14 +1063,18 @@ function renderContacts() {
   });
 }
 
+// 🔥 YEH FUNCTION AB CHAT KABHI DISABLE NAHI KAREGA
 function toggleInputs(enabled) {
-  msgInput.disabled = !enabled;
-  document.getElementById('btn-send').disabled = !enabled;
+  msgInput.disabled = false;
+  document.getElementById('btn-send').disabled = false;
   document.getElementById('btn-start-call').disabled = !enabled;
   document.getElementById('btn-screen-share').disabled = !enabled;
 }
 
-// --- 10. PRIVACY ---
+window.silentConnect = silentConnect;
+window.deleteContact = deleteContact;
+
+// --- 11. PRIVACY ---
 window.addEventListener('blur', () => document.getElementById('privacy-shield').classList.remove('hidden'));
 window.addEventListener('focus', () => document.getElementById('privacy-shield').classList.add('hidden'));
 document.addEventListener('contextmenu', e => e.preventDefault());
