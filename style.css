@@ -1189,3 +1189,60 @@ body {
   .header-actions { flex-wrap: wrap; gap: 6px; }
   .msg { max-width: 85%; }
 }
+/* Emoji tabs — scrollable for 10 categories */
+.emoji-tabs {
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  scrollbar-width: thin;
+}
+.emoji-tabs::-webkit-scrollbar { height: 4px; }
+.emoji-tabs::-webkit-scrollbar-thumb { background: #30363d; border-radius: 2px; }
+.emoji-tabs .tab {
+  min-width: 68px;
+  flex: 0 0 auto;
+}
+
+/* Floating share */
+.studio-modal.floating-share {
+  position: fixed !important;
+  width: 480px !important;
+  height: 360px !important;
+  top: 20px !important;
+  right: 20px !important;
+  left: auto !important;
+  bottom: auto !important;
+  z-index: 99999 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.8) !important;
+}
+.studio-modal.floating-share .studio-header { cursor: move; }
+.studio-modal.floating-share .studio-chat-drawer { display: none !important; }
+.studio-modal.floating-share .studio-footer { display: none !important; }
+
+/* Video swap */
+#remote-card-main.swapped {
+  position: absolute !important;
+  bottom: 20px; right: 20px;
+  width: 220px !important; height: 150px !important;
+  z-index: 100;
+  border: 2px solid #58a6ff;
+}
+#local-preview-card.swapped {
+  position: relative !important;
+  width: 100% !important; height: 100% !important; flex: 1;
+}
+
+/* Remote click ripple */
+.remote-click-ripple {
+  position: fixed; width: 44px; height: 44px;
+  border-radius: 50%;
+  background: rgba(248, 81, 73, 0.35);
+  border: 2px solid #f85149;
+  pointer-events: none; z-index: 999999;
+  transform: translate(-50%, -50%);
+  animation: ghostRipple 0.8s ease-out forwards;
+}
+@keyframes ghostRipple {
+  from { transform: translate(-50%, -50%) scale(0.4); opacity: 1; }
+  to   { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
+}

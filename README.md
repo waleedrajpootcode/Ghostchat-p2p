@@ -2,8 +2,6 @@
 
 <div align="center">
 
-![GhostNode](https://cdn-icons-png.flaticon.com/512/2827/2827989.png)
-
 **Zero-server • Encrypted • Unlimited peers • Built for real work**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-3fb950.svg)](https://opensource.org/licenses/MIT)
@@ -17,7 +15,7 @@
 
 ---
 
-## 🎯 What It Does
+## 🎯 What It Is
 
 GhostNode is a fully decentralized communication app — no accounts, no servers, no data centers. Two people open the link, share their Node ID, and instantly get:
 
@@ -27,32 +25,42 @@ GhostNode is a fully decentralized communication app — no accounts, no servers
 - **File, image, voice note transfer** with auto-compression
 - **Live typing** inside calls (keystroke-by-keystroke)
 - **Group calls** for multiple peers
+- **Multi-peer admin** with real-time online status
 - **Persistent local history** via IndexedDB
 
 Everything encrypted end-to-end using WebRTC's native DTLS/SRTP. Nothing passes through a broker.
 
 ---
 
-## ✨ Feature Highlights
+## ✨ Feature Matrix
 
-| Feature | Status |
-|---------|:------:|
-| Text chat (offline queue) | ✅ |
-| Image / file send (auto-compress) | ✅ |
-| Voice notes (push-to-talk) | ✅ |
-| Audio call | ✅ |
-| Video call (mobile + laptop) | ✅ |
-| Screen share with audio | ✅ |
-| Incoming call accept UI + ringtone | ✅ |
-| Auto-attend while in call | ✅ |
-| Live in-call typing | ✅ |
-| Group call (mesh) | ✅ |
-| Emoji picker (4 categories) | ✅ |
-| E2EE fingerprint badge | ✅ |
-| Privacy shield (auto-blur) | ✅ |
-| Multi-STUN + TURN | ✅ |
-| Auto-reconnect | ✅ |
-| PWA installable | ✅ |
+| Category | Feature | Status |
+|----------|---------|:------:|
+| **Messaging** | Text chat + offline queue | ✅ |
+| | Typing indicator | ✅ |
+| | Live in-call keystroke stream | ✅ |
+| | Message delete (me / everyone) | ✅ |
+| | Code block formatting | ✅ |
+| **Media** | Image send (auto-compress 1280px) | ✅ |
+| | File send | ✅ |
+| | Voice notes (push-to-talk) | ✅ |
+| | Video / audio playback inline | ✅ |
+| | **10 emoji categories (~1500 emojis)** | ✅ |
+| **Calling** | 1-to-1 audio + video | ✅ |
+| | Group mesh calls | ✅ |
+| | Incoming call UI + ringtone | ✅ |
+| | Add person mid-call | ✅ |
+| | Mic / camera toggle | ✅ |
+| **Screen Share** | Display broadcast | ✅ |
+| | **System audio capture** | ✅ |
+| | **Floating draggable window** | ✅ |
+| | **3-state cycle (normal/full/float)** | ✅ |
+| **Advanced** | Video click-to-swap | ✅ |
+| | Remote click ripples | ✅ |
+| | E2EE fingerprint badge | ✅ |
+| | Multi-peer admin (🟢/⚪ status) | ✅ |
+| | Auto-reconnect signaling | ✅ |
+| | Privacy shield on blur | ✅ |
 
 ---
 
@@ -61,12 +69,12 @@ Everything encrypted end-to-end using WebRTC's native DTLS/SRTP. Nothing passes 
 │ Mobile (Guest) │ ◄════════════════════════════════════════════► │ Laptop (Admin) │
 │ • Camera + Mic │ DTLS 1.2 / SRTP AES-128-GCM │ • Camera + Mic │
 │ • Video stream │ │ • Screen share │
-│ • Live typing │ │ • Live typing │
+│ • Live typing │ │ • Multi-peer │
 └──────────────────┘ └──────────────────┘
 ▲ ▲
 └──────────────────── STUN + TURN (NAT traversal) ──────────────────┘
 
-**No broker. No central storage.** Every byte flows directly between peers. STUN finds the address, TURN relays when NAT blocks direct connection.
+No broker. No central storage. Every byte flows directly between peers.
 
 ---
 
@@ -74,7 +82,7 @@ Everything encrypted end-to-end using WebRTC's native DTLS/SRTP. Nothing passes 
 
 ### As Guest
 1. Open the live URL
-2. Copy your **Node ID** (shown in top-left)
+2. Copy your **Node ID**
 3. Share with the Admin
 
 ### As Admin
@@ -82,9 +90,10 @@ Everything encrypted end-to-end using WebRTC's native DTLS/SRTP. Nothing passes 
 2. Choose **PC** or **Laptop**
 3. Paste guest's Node ID → **+ Add Node**
 4. Auto-connect fires within 3 seconds
+5. Click a contact to switch between peers — **multiple peers stay connected**
 
 ### Offline Messaging
-Type anything without a connection — messages queue locally and **auto-send** the moment the peer comes online.
+Type anything without connection — messages queue locally and **auto-send** when peer comes online.
 
 ---
 
@@ -103,11 +112,11 @@ Type anything without a connection — messages queue locally and **auto-send** 
 
 ## 🛠️ Tech Stack
 
-- **PeerJS 1.5.4** — WebRTC signaling wrapper
-- **WebRTC** — DataChannel + MediaStream + Screen Capture
-- **IndexedDB v7** — Atomic local storage
+- **PeerJS 1.5.4** — WebRTC abstraction
+- **WebRTC** — DataChannel, MediaStream, Screen Capture
+- **IndexedDB v8** — Atomic local message store
 - **Service Worker** — PWA offline shell
-- **Vanilla JS** — No framework, ~50KB total
+- **Vanilla JS** — ~60KB total, no framework
 
 ---
 
