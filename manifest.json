@@ -1,5 +1,6 @@
 {
-  "name": "GhostNode - P2P Studio",
+  "id": "/ghostnode-v6-studio/",
+  "name": "GhostNode Studio",
   "short_name": "GhostNode",
   "description": "Zero-server encrypted P2P chat, calls, and screen share",
   "start_url": "./index.html",

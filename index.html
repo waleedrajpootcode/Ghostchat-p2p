@@ -1,13 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>GhostNode - Enterprise P2P Studio</title>
+  <link rel="icon" type="image/png" href="ghost-icon-v2.png">
+  <link rel="shortcut icon" type="image/png" href="ghost-icon-v2.png">
+  <link rel="apple-touch-icon" href="ghost-icon-v2.png">
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.json">
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
+
 <body>
 
   <div id="privacy-shield" class="hidden">
@@ -15,7 +20,7 @@
   </div>
 
   <div class="app-container">
-    
+
     <!-- SIDEBAR -->
     <aside class="sidebar" id="sidebar">
       <div class="my-profile">
@@ -23,7 +28,7 @@
           <h3>Ghost<span class="highlight">Node</span> <small class="saas-badge">v5.0 Ultra</small></h3>
           <button id="btn-admin-toggle" class="btn-pin">🔒 Admin</button>
         </div>
-        
+
         <div class="my-id-box">
           <span>My Node ID: <strong id="my-peer-id">Booting...</strong></span>
           <button id="btn-copy-id" class="btn-copy" title="Copy ID">📋</button>
@@ -73,7 +78,7 @@
           </div>
           <span id="connection-status" class="status-offline">● Searching Mesh...</span>
         </div>
-        
+
         <div class="header-actions">
           <button id="btn-start-call" class="btn-action" disabled>📞 Call</button>
           <button id="btn-group-call" class="btn-action btn-group-action hidden">👥 Group Call</button>
@@ -107,7 +112,7 @@
       <form id="chat-form" class="chat-input-bar">
         <label for="file-input" class="btn-file" title="Send Media">📎</label>
         <input type="file" id="file-input" accept="image/*,video/*,audio/*" style="display:none;">
-        
+
         <button type="button" id="btn-toggle-emoji" class="btn-emoji-toggle" title="Emojis">😊</button>
         <button type="button" id="btn-voice-memo" class="btn-voice-note" title="Record Voice Note">🎙️</button>
 
@@ -121,7 +126,7 @@
   <!-- CALL & SCREEN SHARE STUDIO MODAL -->
   <div id="call-modal" class="modal hidden">
     <div class="modal-content studio-modal">
-      
+
       <div class="studio-header">
         <div class="studio-title-group">
           <h3 id="call-status-title">Live Call Active</h3>
@@ -133,9 +138,9 @@
           <button id="btn-toggle-pip" class="btn-action">⛶ Fullscreen</button>
         </div>
       </div>
-      
+
       <div class="studio-body">
-        
+
         <div class="studio-stream-area">
           <div id="screen-hud-overlay" class="screen-hud-overlay">
             <span class="hud-badge">💬 Live Screen Overlay:</span>
@@ -148,7 +153,7 @@
               <span class="video-label" id="remote-stream-label">Remote Stream</span>
               <audio id="remote-audio-player" autoplay playsinline></audio>
             </div>
-            
+
             <div id="local-preview-card" class="video-card hidden">
               <video id="local-stream-video" autoplay playsinline muted></video>
               <span class="video-label">My Camera</span>
@@ -159,19 +164,20 @@
             <button id="btn-toggle-mic" class="tool-btn" title="Toggle Mic">🎙️ Mic: Off</button>
             <button id="btn-toggle-cam" class="tool-btn" title="Toggle Camera">📷 Cam: Off</button>
             <button id="btn-screen-in-call" class="tool-btn" title="Share Screen + Sound">🖥️ Share Screen</button>
-            <button id="btn-unmute-audio" class="tool-btn hidden" style="background:#58a6ff; color:#0d1117;">🔊 Tap to Enable Audio</button>
+            <button id="btn-unmute-audio" class="tool-btn hidden" style="background:#58a6ff; color:#0d1117;">🔊 Tap to
+              Enable Audio</button>
           </div>
         </div>
 
         <div class="studio-chat-drawer">
           <div class="drawer-header">Live In-Call Keystrokes & Chat</div>
           <div id="in-call-messages" class="studio-messages-log"></div>
-          
+
           <div class="live-keystroke-box">
             <small>Peer Live Typing Stream:</small>
             <div id="remote-live-text" class="live-stream-text">Listening...</div>
           </div>
-          
+
           <div class="studio-input-row">
             <input type="text" id="my-live-input" placeholder="Type live keystroke to peer...">
           </div>
@@ -191,4 +197,5 @@
 
   <script src="app.js"></script>
 </body>
+
 </html>
