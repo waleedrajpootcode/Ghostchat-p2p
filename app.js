@@ -93,7 +93,7 @@ const peer = new Peer(myId, {
     iceCandidatePoolSize: 10,
     sdpSemantics: 'unified-plan'
   },
-  debug: 1
+  debug: 0
 });
 
 peer.on('open', (id) => {
