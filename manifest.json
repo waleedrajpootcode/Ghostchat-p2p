@@ -1,15 +1,24 @@
 {
-  "name": "GhostChat P2P",
-  "short_name": "GhostChat",
+  "name": "GhostNode - P2P Studio",
+  "short_name": "GhostNode",
+  "description": "Zero-server encrypted P2P chat, calls, and screen share",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#111b21",
-  "theme_color": "#202c33",
+  "orientation": "any",
+  "background_color": "#030507",
+  "theme_color": "#00ff88",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/9446/9446864.png",
+      "src": "https://cdn-icons-png.flaticon.com/512/2827/2827989.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2827/2827989.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
