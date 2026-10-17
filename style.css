@@ -1219,17 +1219,42 @@ body {
 .studio-modal.floating-share .studio-chat-drawer { display: none !important; }
 .studio-modal.floating-share .studio-footer { display: none !important; }
 
-/* Video swap */
-#remote-card-main.swapped {
+/* === VIDEO MAXIMIZE — click any video to enlarge it === */
+#video-grid.maximized-remote,
+#video-grid.maximized-local {
+  position: relative;
+  grid-template-columns: 1fr !important;
+  align-content: stretch !important;
+}
+
+#video-grid.maximized-remote #local-preview-card,
+#video-grid.maximized-local #remote-card-main {
   position: absolute !important;
-  bottom: 20px; right: 20px;
-  width: 220px !important; height: 150px !important;
+  bottom: 10px;
+  right: 10px;
+  width: 200px !important;
+  height: 140px !important;
+  min-height: 0 !important;
   z-index: 100;
   border: 2px solid #58a6ff;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  cursor: pointer;
 }
-#local-preview-card.swapped {
-  position: relative !important;
-  width: 100% !important; height: 100% !important; flex: 1;
+
+#video-grid.maximized-remote #local-preview-card video,
+#video-grid.maximized-local #remote-card-main video {
+  object-fit: cover;
+}
+
+#video-grid.maximized-remote #remote-card-main,
+#video-grid.maximized-local #local-preview-card {
+  min-height: 0 !important;
+}
+
+#remote-card-main,
+#local-preview-card {
+  cursor: pointer;
 }
 
 /* Remote click ripple */

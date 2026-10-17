@@ -106,18 +106,46 @@ peer.on('connection', (conn) => setupConnection(conn));
 peer.on('call', (call) => handleIncomingCall(call));
 peer.on('disconnected', () => setTimeout(() => { try { peer.reconnect(); } catch(e) { location.reload(); } }, 1500));
 peer.on('error', (err) => {
-  console.warn('Peer error:', err.type);
-  if (err.type === 'unavailable-id') { localStorage.removeItem('ghost_my_id'); setTimeout(() => location.reload(), 800); }
-  if (['network','server-error','socket-error'].includes(err.type)) setTimeout(() => { try { peer.reconnect(); } catch(e){} }, 3000);
+  if (err.type === 'peer-unavailable') {
+    const match = err.message.match(/peer (\S+)/);
+    if (match) {
+      const peerId = match[1];
+      delete connectingTo[peerId];
+      const n = (peerBackoff[peerId + '_n'] || 0) + 1;
+      peerBackoff[peerId + '_n'] = n;
+      const wait = Math.min(5000 * Math.pow(2, n - 1), 15000);
+      peerBackoff[peerId] = Date.now() + wait;
+      console.log(`⏳ ${peerId} offline, retry in ${Math.round(wait/1000)}s`);
+    }
+    return;
+  }
+  if (err.type === 'unavailable-id') {
+    localStorage.removeItem('ghost_my_id');
+    setTimeout(() => location.reload(), 800);
+    return;
+  }
+  if (['network', 'server-error', 'socket-error'].includes(err.type)) {
+    setTimeout(() => { try { peer.reconnect(); } catch(e) {} }, 3000);
+    return;
+  }
+  console.warn('Peer error:', err.type, err.message);
 });
 
 // === CONNECTIONS ===
 const connectingTo = {};
+const peerBackoff = {};
 function attemptConnectAll() {
   if (isAdmin) {
     contacts.forEach(c => { if (!activeConns[c.id] || !activeConns[c.id].open) silentConnect(c.id, c.name); });
   } else {
-    ['admin_pc', 'admin_laptop'].forEach(id => { if (!activeConns[id] || !activeConns[id].open) silentConnect(id, id); });
+    // Guest: if connected to ANY admin, STOP trying the other
+    const connectedToAdmin = Object.keys(activeConns).some(id =>
+      (id === 'admin_pc' || id === 'admin_laptop') && activeConns[id].open
+    );
+    if (connectedToAdmin) return;
+    ['admin_pc', 'admin_laptop'].forEach(id => {
+      if (!activeConns[id] || !activeConns[id].open) silentConnect(id, id === 'admin_pc' ? 'Admin PC' : 'Admin Laptop');
+    });
   }
 }
 
@@ -125,11 +153,16 @@ function silentConnect(targetId, name) {
   if (!targetId || targetId === myId) return;
   if (activeConns[targetId] && activeConns[targetId].open) return;
   if (connectingTo[targetId]) return;
+  if (peerBackoff[targetId] && peerBackoff[targetId] > Date.now()) return;
   connectingTo[targetId] = true;
   let conn;
   try { conn = peer.connect(targetId, { reliable: true }); } catch(e) { delete connectingTo[targetId]; return; }
   setTimeout(() => { delete connectingTo[targetId]; try { conn.close(); } catch(e) {} }, 8000);
-  conn.on('open', () => delete connectingTo[targetId]);
+    conn.on('open', () => {
+    delete connectingTo[targetId];
+    delete peerBackoff[targetId];
+    delete peerBackoff[targetId + '_n'];
+  });
   conn.on('error', () => delete connectingTo[targetId]);
   setupConnection(conn, name);
 }
@@ -154,6 +187,9 @@ function setupConnection(conn, name = null) {
   conn.on('data', (data) => handleIncomingData(data, conn));
   conn.on('close', () => {
     delete activeConns[conn.peer];
+    // ✅ Recently-online peer → clear backoff, retry immediately
+    delete peerBackoff[conn.peer];
+    delete peerBackoff[conn.peer + '_n'];
     if (currentPeerId === conn.peer) {
       document.getElementById('connection-status').textContent = '● Scanning...';
       document.getElementById('connection-status').className = 'status-offline';
@@ -163,7 +199,7 @@ function setupConnection(conn, name = null) {
     }
     if (isAdmin) renderContacts();
     setTimeout(attemptConnectAll, 800);
-  });
+});
 }
 
 function startLatencyTracker(peerId) {
@@ -879,27 +915,44 @@ document.addEventListener('mousemove', (e) => {
 });
 document.addEventListener('mouseup', () => { isDragging = false; });
 
-// === VIDEO SWAP ===
+// === VIDEO MAXIMIZE — click any video to enlarge it ===
 setTimeout(() => {
-  ['remote-stream-video', 'local-stream-video'].forEach(id => {
-    const v = document.getElementById(id);
-    if (!v) return;
-    v.onclick = (e) => {
-      if (currentPeerId) {
-        const conn = activeConns[currentPeerId];
-        if (conn && conn.open) {
-          const r = e.target.getBoundingClientRect();
-          const x = ((e.clientX - r.left) / r.width) * 1920;
-          const y = ((e.clientY - r.top) / r.height) * 1080;
-          conn.send({ type: 'screen_click', x, y, screenW: 1920, screenH: 1080 });
-        }
+  const videoGrid = document.getElementById('video-grid');
+  const remoteCard = document.getElementById('remote-card-main');
+  const localCard = document.getElementById('local-preview-card');
+  if (!videoGrid || !remoteCard || !localCard) return;
+
+  // Click remote video → remote becomes big
+  remoteCard.addEventListener('click', (e) => {
+    // Send click coordinates for remote screen interaction
+    if (currentPeerId) {
+      const conn = activeConns[currentPeerId];
+      if (conn && conn.open) {
+        const vid = document.getElementById('remote-stream-video');
+        const r = vid.getBoundingClientRect();
+        const x = ((e.clientX - r.left) / r.width) * 1920;
+        const y = ((e.clientY - r.top) / r.height) * 1080;
+        conn.send({ type: 'screen_click', x, y, screenW: 1920, screenH: 1080 });
       }
-      const r = document.getElementById('remote-card-main');
-      const l = document.getElementById('local-preview-card');
-      if (l.classList.contains('hidden')) return;
-      r.classList.toggle('swapped');
-      l.classList.toggle('swapped');
-    };
+    }
+    // Toggle maximize (only if local preview visible)
+    if (localCard.classList.contains('hidden')) return;
+    if (videoGrid.classList.contains('maximized-remote')) {
+      videoGrid.classList.remove('maximized-remote', 'maximized-local');
+    } else {
+      videoGrid.classList.remove('maximized-local');
+      videoGrid.classList.add('maximized-remote');
+    }
+  });
+
+  // Click local video → local becomes big
+  localCard.addEventListener('click', () => {
+    if (videoGrid.classList.contains('maximized-local')) {
+      videoGrid.classList.remove('maximized-remote', 'maximized-local');
+    } else {
+      videoGrid.classList.remove('maximized-remote');
+      videoGrid.classList.add('maximized-local');
+    }
   });
 }, 1500);
 
@@ -1010,6 +1063,22 @@ document.getElementById('my-live-input').oninput = (e) => {
   if (cn) cn.send({ type: 'live_typing', text: e.target.value });
   document.getElementById('hud-latest-text').textContent = `Me: ${e.target.value}`;
 };
+
+// ✅ Tab focus hote hi force-connect (bypass backoff)
+window.addEventListener('focus', () => {
+  if (isAdmin) {
+    contacts.forEach(c => {
+      delete peerBackoff[c.id];
+      delete peerBackoff[c.id + '_n'];
+    });
+  } else {
+    ['admin_pc', 'admin_laptop'].forEach(id => {
+      delete peerBackoff[id];
+      delete peerBackoff[id + '_n'];
+    });
+  }
+  attemptConnectAll();
+});
 
 // === PRIVACY ===
 window.addEventListener('blur', () => document.getElementById('privacy-shield').classList.remove('hidden'));
