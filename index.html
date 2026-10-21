@@ -26,7 +26,10 @@
       <div class="my-profile">
         <div class="brand-row">
           <h3>Ghost<span class="highlight">Node</span> <small class="saas-badge">v5.0 Ultra</small></h3>
-          <button id="btn-admin-toggle" class="btn-pin">🔒 Admin</button>
+          <div class="brand-actions">
+            <button id="btn-install-app" class="btn-install hidden" title="Install App to Device">📲 Install</button>
+            <button id="btn-admin-toggle" class="btn-pin">🔒 Admin</button>
+          </div>
         </div>
 
         <div class="my-id-box">
@@ -102,13 +105,19 @@
         <div class="emoji-tabs">
           <span class="tab active" data-cat="smileys">Smileys</span>
           <span class="tab" data-cat="gestures">Gestures</span>
-          <span class="tab" data-cat="hearts">Hearts & Fire</span>
+          <span class="tab" data-cat="hearts">Hearts</span>
+          <span class="tab" data-cat="animals">Animals</span>
+          <span class="tab" data-cat="food">Food</span>
+          <span class="tab" data-cat="nature">Nature</span>
+          <span class="tab" data-cat="travel">Travel</span>
+          <span class="tab" data-cat="objects">Objects</span>
+          <span class="tab" data-cat="symbols">Symbols</span>
           <span class="tab" data-cat="tech">Tech</span>
         </div>
         <div id="emoji-grid-content" class="emoji-grid-content"></div>
       </div>
 
-      <!-- Input Bar (Kabhi Disable Nahi Hoga - Always Ready) -->
+      <!-- Input Bar -->
       <form id="chat-form" class="chat-input-bar">
         <label for="file-input" class="btn-file" title="Send Media">📎</label>
         <input type="file" id="file-input" accept="image/*,video/*,audio/*" style="display:none;">
@@ -164,8 +173,7 @@
             <button id="btn-toggle-mic" class="tool-btn" title="Toggle Mic">🎙️ Mic: Off</button>
             <button id="btn-toggle-cam" class="tool-btn" title="Toggle Camera">📷 Cam: Off</button>
             <button id="btn-screen-in-call" class="tool-btn" title="Share Screen + Sound">🖥️ Share Screen</button>
-            <button id="btn-unmute-audio" class="tool-btn hidden" style="background:#58a6ff; color:#0d1117;">🔊 Tap to
-              Enable Audio</button>
+            <button id="btn-unmute-audio" class="tool-btn hidden" style="background:#58a6ff; color:#0d1117;">🔊 Tap to Enable Audio</button>
           </div>
         </div>
 
@@ -195,6 +203,16 @@
 
   <audio id="ringtone" src="ringtone.mp3" loop preload="auto"></audio>
 
+  <!-- PWA Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('✅ ServiceWorker Registered'))
+          .catch(err => console.warn('SW failed:', err));
+      });
+    }
+  </script>
   <script src="app.js"></script>
 </body>
 

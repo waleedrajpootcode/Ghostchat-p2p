@@ -1,5 +1,5 @@
 // ============================================================
-// GHOSTNODE v7.2 — Complete Build (All Features Restored)
+// GHOSTNODE v7.3 — Complete Build (All Features Restored & Fixed)
 // ============================================================
 const ADMIN_PIN = "2007";
 let isAdmin = sessionStorage.getItem('ghost_is_admin') === 'true';
@@ -30,6 +30,34 @@ let isRecordingVoice = false;
 let _pendingCall = null;
 let latencyInterval = null;
 let pipState = 0;
+
+// === PWA INSTALL PROMPT SUPPORT ===
+let deferredPrompt = null;
+const installBtn = document.getElementById('btn-install-app');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  if (installBtn) installBtn.classList.remove('hidden');
+});
+
+if (installBtn) {
+  installBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) {
+      alert("To install this app, tap your browser menu (⋮) and select 'Add to Home screen' or 'Install App'.");
+      return;
+    }
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`PWA install outcome: ${outcome}`);
+    deferredPrompt = null;
+    installBtn.classList.add('hidden');
+  });
+}
+
+window.addEventListener('appinstalled', () => {
+  if (installBtn) installBtn.classList.add('hidden');
+});
 
 // === CONN HELPERS ===
 function getActiveConn() { return currentPeerId ? activeConns[currentPeerId] : null; }
@@ -85,13 +113,11 @@ const peer = new Peer(myId, {
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:global.stun.twilio.com:3478' },
-      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+      { urls: 'stun:global.stun.twilio.com:3478' }
     ],
-    iceCandidatePoolSize: 10,
-    sdpSemantics: 'unified-plan'
+    iceCandidatePoolSize: 10
   },
   debug: 0
 });
@@ -113,7 +139,7 @@ peer.on('error', (err) => {
       delete connectingTo[peerId];
       const n = (peerBackoff[peerId + '_n'] || 0) + 1;
       peerBackoff[peerId + '_n'] = n;
-      const wait = Math.min(5000 * Math.pow(2, n - 1), 15000);
+      const wait = Math.min(3000 * Math.pow(1.5, n - 1), 10000);
       peerBackoff[peerId] = Date.now() + wait;
       console.log(`⏳ ${peerId} offline, retry in ${Math.round(wait/1000)}s`);
     }
@@ -149,6 +175,7 @@ function attemptConnectAll() {
   }
 }
 
+// Fixed silentConnect: timer is properly cleared on connection open!
 function silentConnect(targetId, name) {
   if (!targetId || targetId === myId) return;
   if (activeConns[targetId] && activeConns[targetId].open) return;
@@ -157,13 +184,25 @@ function silentConnect(targetId, name) {
   connectingTo[targetId] = true;
   let conn;
   try { conn = peer.connect(targetId, { reliable: true }); } catch(e) { delete connectingTo[targetId]; return; }
-  setTimeout(() => { delete connectingTo[targetId]; try { conn.close(); } catch(e) {} }, 8000);
-    conn.on('open', () => {
+
+  // Safe timeout: ONLY close if it never opens within 10 seconds
+  const connectTimeout = setTimeout(() => {
+    if (connectingTo[targetId]) {
+      delete connectingTo[targetId];
+      try { conn.close(); } catch(e) {}
+    }
+  }, 10000);
+
+  conn.on('open', () => {
+    clearTimeout(connectTimeout); // CANCEL timer so connection never dies!
     delete connectingTo[targetId];
     delete peerBackoff[targetId];
     delete peerBackoff[targetId + '_n'];
   });
-  conn.on('error', () => delete connectingTo[targetId]);
+  conn.on('error', () => {
+    clearTimeout(connectTimeout);
+    delete connectingTo[targetId];
+  });
   setupConnection(conn, name);
 }
 
@@ -187,7 +226,6 @@ function setupConnection(conn, name = null) {
   conn.on('data', (data) => handleIncomingData(data, conn));
   conn.on('close', () => {
     delete activeConns[conn.peer];
-    // ✅ Recently-online peer → clear backoff, retry immediately
     delete peerBackoff[conn.peer];
     delete peerBackoff[conn.peer + '_n'];
     if (currentPeerId === conn.peer) {
@@ -199,7 +237,7 @@ function setupConnection(conn, name = null) {
     }
     if (isAdmin) renderContacts();
     setTimeout(attemptConnectAll, 800);
-});
+  });
 }
 
 function startLatencyTracker(peerId) {
@@ -234,6 +272,15 @@ function generateE2EEFingerprint(id1, id2) {
 // === DATA HANDLER ===
 function handleIncomingData(data, conn) {
   const sp = conn.peer;
+
+  // Auto focus active peer if idle
+  if (!currentPeerId) {
+    currentPeerId = sp;
+    updateOnlineUI(getContactName(sp) || sp);
+    toggleInputs(true);
+    loadContactMessages(sp);
+  }
+
   if (data.type === 'ping') { if (conn.open) conn.send({ type: 'pong', t: data.t }); }
   else if (data.type === 'pong') {
     if (sp === currentPeerId) document.getElementById('latency-badge').textContent = `⚡ ${Math.round((Date.now()-data.t)/2)} ms P2P`;
@@ -269,7 +316,7 @@ function handleIncomingData(data, conn) {
   else if (data.type === 'screen_click') { showRemoteClick(data.x, data.y, data.screenW, data.screenH); }
 }
 
-// === FORMAT MESSAGE (RESTORED) ===
+// === FORMAT MESSAGE ===
 function formatMessageContent(text) {
   if (text.startsWith('```') && text.endsWith('```')) {
     const pre = document.createElement('pre');
@@ -313,7 +360,7 @@ function sendDesktopNotification(title, body) {
 
 if ("Notification" in window && Notification.permission !== "granted") Notification.requestPermission();
 
-// === FULL EMOJI DATA (10 categories) ===
+// === ALL 10 EMOJI CATEGORIES ===
 const EMOJI_DATA = {
   smileys: ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','☺️','😚','😙','🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','🥴','😵','🤯','🤠','🥳','🥸','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻','👽','👾','🤖'],
   gestures: ['👋','🤚','🖐️','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏','✍️','💅','🤳','💪','🦾','🦵','🦿','🦶','👂','🦻','👃','👀','👁️','👅','👄','💋','🧠','🫀','🫁','🦷','🦴','👤','👥','🫂','🧑','👶','🧒','👦','👧','🧓','👴','👵','🙍','🙎','🙅','🙆','💁','🙋','🧏','🙇','🤦','🤷'],
@@ -327,7 +374,6 @@ const EMOJI_DATA = {
   tech: ['💻','🖥️','📱','⌨️','🖱️','🖨️','📷','🎥','📽️','🎙️','🎧','📡','🚀','🛸','⚡','🔋','💡','🕹️','🎮','🤖','🔒','🔑','📦','☕','💾','💿','📀','📼','🖲️','📟','📠','☎️','📞','🔌','🔦','🕯️','⏰','⏱️','⌚','📺','📻','🎚️','🎛️','🧭','📶','📳','📴','🔇','🔈','🔉','🔊','📢','📣','🔔','🔕','🛰️','🧬','🔬','🔭','🧪','🧫','⚗️','🔮']
 };
 
-// === EMOJI TABS INJECTION ===
 function initEmojiTabs() {
   const tabsContainer = document.querySelector('.emoji-tabs');
   if (!tabsContainer) return;
@@ -483,6 +529,9 @@ voiceBtn.onclick = async () => {
 
 function appendMessageUI(msgId, type, text, fileData = null, fileType = null, fileName = null, ts = Date.now()) {
   const c = document.getElementById('messages-container');
+  const empty = c.querySelector('.empty-state');
+  if (empty) empty.remove();
+
   const m = document.createElement('div');
   m.className = `msg ${type}`;
   m.id = `msg-${msgId}`;
@@ -515,7 +564,7 @@ function appendStudioMessage(s, t) {
   f.appendChild(i); f.scrollTop = f.scrollHeight;
 }
 
-// === DELETE CHOICE MODAL (RESTORED) ===
+// === DELETE CHOICE MODAL ===
 function showDeleteChoiceModal(msgId, msgDiv) {
   const choiceModal = document.createElement('div');
   choiceModal.className = 'modal';
@@ -614,7 +663,6 @@ async function getAdaptiveMediaStream(wantAudio = true, wantVideo = true) {
   if (wantVideo && !stream.getVideoTracks().length) {
     try { createSyntheticVideoStream().getVideoTracks().forEach(t => stream.addTrack(t)); } catch(e) {}
   }
-  console.log('🎥 Stream:', stream.getTracks().map(t => `${t.kind}:${t.readyState}`));
   return stream;
 }
 
@@ -634,16 +682,19 @@ document.getElementById('btn-start-call').onclick = async () => {
     document.getElementById('local-stream-video').srcObject = localStream;
     document.getElementById('local-preview-card').classList.remove('hidden');
   }
+  isMicOn = true; isCamOn = true;
+  document.getElementById('btn-toggle-mic').textContent = "🎙️ Mic: ON";
+  document.getElementById('btn-toggle-mic').classList.add('active');
+  document.getElementById('btn-toggle-cam').textContent = "📷 Cam: ON";
+  document.getElementById('btn-toggle-cam').classList.add('active');
   updateHardwareStatusPill();
   try {
     const call = peer.call(currentPeerId, localStream);
-    console.log('📞 Call initiated to', currentPeerId);
     bindCallEvents(call, currentPeerId);
   } catch(e) { alert("Call failed: " + e.message); }
 };
 
 function handleIncomingCall(call) {
-  console.log('📞 Incoming:', call.peer);
   activeCalls[call.peer] = call;
   bindCallEvents(call, call.peer);
   const modalOpen = !document.getElementById('call-modal').classList.contains('hidden');
@@ -673,6 +724,11 @@ document.getElementById('btn-accept-call').onclick = async () => {
     document.getElementById('local-stream-video').srcObject = localStream;
     document.getElementById('local-preview-card').classList.remove('hidden');
   }
+  isMicOn = true; isCamOn = true;
+  document.getElementById('btn-toggle-mic').textContent = "🎙️ Mic: ON";
+  document.getElementById('btn-toggle-mic').classList.add('active');
+  document.getElementById('btn-toggle-cam').textContent = "📷 Cam: ON";
+  document.getElementById('btn-toggle-cam').classList.add('active');
   updateHardwareStatusPill();
   const conn = activeConns[call.peer];
   if (conn && conn.open) conn.send({ type: 'call_accepted', isGroup: isGroupCallActive });
@@ -681,7 +737,6 @@ document.getElementById('btn-accept-call').onclick = async () => {
 function bindCallEvents(call, peerId, name = null) {
   activeCalls[peerId] = call;
   call.on('stream', (remote) => {
-    console.log('📺 Stream from', peerId, ':', remote.getTracks().map(t => `${t.kind}:${t.readyState}`));
     const video = document.getElementById('remote-stream-video');
     const audio = document.getElementById('remote-audio-player');
     video.srcObject = remote; video.playsInline = true; video.muted = false;
@@ -740,7 +795,7 @@ document.getElementById('btn-group-call').onclick = async () => {
   });
 };
 
-// === IN-CALL ADD PERSON (RESTORED) ===
+// === IN-CALL ADD PERSON ===
 document.getElementById('btn-in-call-add').onclick = async () => {
   const targetId = prompt("Enter Node ID to add to this call:");
   if (!targetId || targetId === myId) return;
@@ -754,52 +809,26 @@ document.getElementById('btn-in-call-add').onclick = async () => {
   } catch(e) { alert("Failed: " + e.message); }
 };
 
-// === MIC/CAM ===
-document.getElementById('btn-toggle-mic').onclick = async () => {
+// === MIC/CAM TOGGLES ===
+document.getElementById('btn-toggle-mic').onclick = () => {
   const btn = document.getElementById('btn-toggle-mic');
-  if (!isMicOn) {
-    try {
-      const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const at = ms.getAudioTracks()[0];
-      Object.values(activeCalls).forEach(c => {
-        if (c.peerConnection) {
-          const s = c.peerConnection.getSenders().find(x => x.track && x.track.kind === 'audio');
-          if (s) s.replaceTrack(at);
-        }
-      });
-      if (localStream) { localStream.getAudioTracks().forEach(t => { t.enabled = false; localStream.removeTrack(t); }); localStream.addTrack(at); }
-      isMicOn = true; btn.textContent = "🎙️ Mic: ON"; btn.classList.add('active');
-    } catch(e) { alert("Mic: " + e.message); }
-  } else {
-    if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = false);
-    isMicOn = false; btn.textContent = "🎙️ Mic: Off"; btn.classList.remove('active');
-  }
+  if (!localStream) return;
+  isMicOn = !isMicOn;
+  localStream.getAudioTracks().forEach(t => t.enabled = isMicOn);
+  btn.textContent = isMicOn ? "🎙️ Mic: ON" : "🎙️ Mic: Off";
+  btn.classList.toggle('active', isMicOn);
   updateHardwareStatusPill();
 };
 
-document.getElementById('btn-toggle-cam').onclick = async () => {
+document.getElementById('btn-toggle-cam').onclick = () => {
   const btn = document.getElementById('btn-toggle-cam');
-  const lv = document.getElementById('local-stream-video');
-  if (!isCamOn) {
-    try {
-      const cs = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-      const vt = cs.getVideoTracks()[0];
-      lv.srcObject = cs;
-      document.getElementById('local-preview-card').classList.remove('hidden');
-      Object.values(activeCalls).forEach(c => {
-        if (c.peerConnection) {
-          const s = c.peerConnection.getSenders().find(x => x.track && x.track.kind === 'video');
-          if (s) s.replaceTrack(vt);
-          else c.peerConnection.addTrack(vt, cs);
-        }
-      });
-      isCamOn = true; btn.textContent = "📷 Cam: ON"; btn.classList.add('active');
-    } catch(e) { alert("Cam: " + e.message); }
-  } else {
-    isCamOn = false; btn.textContent = "📷 Cam: Off"; btn.classList.remove('active');
-    document.getElementById('local-preview-card').classList.add('hidden');
-    if (lv.srcObject) { lv.srcObject.getTracks().forEach(t => t.stop()); lv.srcObject = null; }
-  }
+  const lv = document.getElementById('local-preview-card');
+  if (!localStream) return;
+  isCamOn = !isCamOn;
+  localStream.getVideoTracks().forEach(t => t.enabled = isCamOn);
+  lv.classList.toggle('hidden', !isCamOn);
+  btn.textContent = isCamOn ? "📷 Cam: ON" : "📷 Cam: Off";
+  btn.classList.toggle('active', isCamOn);
   updateHardwareStatusPill();
 };
 
@@ -812,7 +841,6 @@ async function triggerUniversalScreenShare() {
       video: { cursor: 'always', frameRate: 30 },
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
     });
-    console.log('🖥️ Screen tracks:', ds.getTracks().map(t => `${t.kind}:${t.label}`));
     isScreenSharing = true;
     document.getElementById('call-modal').classList.remove('hidden');
     document.getElementById('call-status-title').textContent = "Broadcasting Screen...";
@@ -875,7 +903,7 @@ function closeCallModal() {
   document.getElementById('btn-toggle-pip').textContent = "⛶ Fullscreen";
 }
 
-// === PIP / FLOAT / FULLSCREEN (3-state cycle — RESTORED + NEW) ===
+// === PIP / FLOAT / FULLSCREEN (3-state cycle) ===
 document.getElementById('btn-toggle-pip').onclick = async () => {
   const modal = document.querySelector('.studio-modal');
   const btn = document.getElementById('btn-toggle-pip');
@@ -915,16 +943,14 @@ document.addEventListener('mousemove', (e) => {
 });
 document.addEventListener('mouseup', () => { isDragging = false; });
 
-// === VIDEO MAXIMIZE — click any video to enlarge it ===
+// === VIDEO MAXIMIZE ===
 setTimeout(() => {
   const videoGrid = document.getElementById('video-grid');
   const remoteCard = document.getElementById('remote-card-main');
   const localCard = document.getElementById('local-preview-card');
   if (!videoGrid || !remoteCard || !localCard) return;
 
-  // Click remote video → remote becomes big
   remoteCard.addEventListener('click', (e) => {
-    // Send click coordinates for remote screen interaction
     if (currentPeerId) {
       const conn = activeConns[currentPeerId];
       if (conn && conn.open) {
@@ -935,7 +961,6 @@ setTimeout(() => {
         conn.send({ type: 'screen_click', x, y, screenW: 1920, screenH: 1080 });
       }
     }
-    // Toggle maximize (only if local preview visible)
     if (localCard.classList.contains('hidden')) return;
     if (videoGrid.classList.contains('maximized-remote')) {
       videoGrid.classList.remove('maximized-remote', 'maximized-local');
@@ -945,7 +970,6 @@ setTimeout(() => {
     }
   });
 
-  // Click local video → local becomes big
   localCard.addEventListener('click', () => {
     if (videoGrid.classList.contains('maximized-local')) {
       videoGrid.classList.remove('maximized-remote', 'maximized-local');
@@ -1064,7 +1088,7 @@ document.getElementById('my-live-input').oninput = (e) => {
   document.getElementById('hud-latest-text').textContent = `Me: ${e.target.value}`;
 };
 
-// ✅ Tab focus hote hi force-connect (bypass backoff)
+// Focus restore
 window.addEventListener('focus', () => {
   if (isAdmin) {
     contacts.forEach(c => {
@@ -1080,10 +1104,9 @@ window.addEventListener('focus', () => {
   attemptConnectAll();
 });
 
-// === PRIVACY ===
+// Privacy
 window.addEventListener('blur', () => document.getElementById('privacy-shield').classList.remove('hidden'));
 window.addEventListener('focus', () => document.getElementById('privacy-shield').classList.add('hidden'));
 document.addEventListener('contextmenu', e => e.preventDefault());
 
-// === INIT EMOJI TABS ===
 setTimeout(initEmojiTabs, 100);
