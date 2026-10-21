@@ -1,5 +1,5 @@
 // ============================================================
-// GHOSTNODE v9.0 — Clean & Rock-Solid P2P Engine
+// GHOSTNODE v9.5 — Universal P2P Studio (Laptop, PC & Mobile)
 // ============================================================
 const ADMIN_PIN = "2007";
 let isAdmin = sessionStorage.getItem('ghost_is_admin') === 'true';
@@ -51,7 +51,7 @@ if (installBtn) {
     }
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    console.log(`PWA install outcome: ${outcome}`);
+    console.log(`PWA install: ${outcome}`);
     deferredPrompt = null;
     installBtn.classList.add('hidden');
   });
@@ -107,7 +107,7 @@ function switchToPeer(peerId, name) {
   if (isAdmin) renderContacts();
 }
 
-// === FAST & ULTRA-RELIABLE STUN SERVERS (NO AUTH REQUIRED) ===
+// === PEER INITIALIZATION ===
 const peer = new Peer(myId, {
   config: {
     iceServers: [
@@ -155,7 +155,7 @@ peer.on('error', (err) => {
   console.warn('Peer error:', err.type, err.message);
 });
 
-// === CONNECTIONS ===
+// === AUTO MESH CONNECT (LAPTOP ↔ PC ↔ MOBILE) ===
 const connectingTo = {};
 const peerBackoff = {};
 
@@ -164,7 +164,14 @@ function attemptConnectAll() {
     contacts.forEach(c => {
       if (!activeConns[c.id] || !activeConns[c.id].open) silentConnect(c.id, c.name);
     });
+
+    // Laptop & PC mutual discovery: Laptop scans for PC, PC scans for Laptop
+    const otherAdmin = adminDevice === 'PC' ? 'admin_laptop' : 'admin_pc';
+    if (!activeConns[otherAdmin] || !activeConns[otherAdmin].open) {
+      silentConnect(otherAdmin, adminDevice === 'PC' ? 'Admin Laptop' : 'Admin PC');
+    }
   } else {
+    // Mobile / Guest scans for both PC and Laptop
     const connectedToAdmin = Object.keys(activeConns).some(id =>
       (id === 'admin_pc' || id === 'admin_laptop') && activeConns[id].open
     );
@@ -324,7 +331,8 @@ function handleIncomingData(data, conn) {
   }
   else if (data.type === 'call_ring') {
     playRingtone();
-    sendDesktopNotification(data.isScreen ? "Screen Sharing Session" : "Incoming Call", "Click to join");
+    const title = data.isScreen ? "Screen Sharing Session" : "Incoming Call";
+    sendDesktopNotification(title, "Click to join");
   }
   else if (data.type === 'call_accepted') {
     document.getElementById('call-status-title').textContent = "Live Session Active";
@@ -333,12 +341,18 @@ function handleIncomingData(data, conn) {
   else if (data.type === 'call_ended') {
     closeCallModal();
   }
+  // Two-way Screen Share State Notification
   else if (data.type === 'screen_state') {
     const title = document.getElementById('call-status-title');
     const grid = document.getElementById('video-grid');
+    const remoteVid = document.getElementById('remote-stream-video');
+
     if (data.isSharing) {
       title.textContent = `🖥️ ${getContactName(sp) || sp} is Sharing Screen`;
       if (grid) grid.classList.add('maximized-remote');
+      if (remoteVid) {
+        remoteVid.play().catch(() => {});
+      }
     } else {
       title.textContent = "Live Session Active";
       if (grid) grid.classList.remove('maximized-remote');
@@ -660,7 +674,6 @@ const ringtone = document.getElementById('ringtone');
 function playRingtone() { ringtone.play().catch(() => playLoudChime()); }
 function stopRingtone() { ringtone.pause(); ringtone.currentTime = 0; }
 
-// Creates a silent audio track for WebRTC compatibility
 function createSilentAudioTrack() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -674,7 +687,6 @@ function createSilentAudioTrack() {
   } catch(e) { return null; }
 }
 
-// Creates dummy stream for receiver so PeerJS call.answer never fails or shows black screen
 function createDummyStream() {
   const canvas = document.createElement('canvas');
   canvas.width = 320; canvas.height = 240;
@@ -698,7 +710,7 @@ async function getMediaStream() {
   }
 }
 
-// === CALL EVENTS (BULLETPROOF STREAM RENDER) ===
+// === CALL EVENTS (TWO-WAY SCREEN RENDERING) ===
 function bindCallEvents(call, peerId, name = null) {
   activeCalls[peerId] = call;
 
@@ -708,7 +720,7 @@ function bindCallEvents(call, peerId, name = null) {
     const audio = document.getElementById('remote-audio-player');
 
     video.srcObject = remoteStream;
-    video.muted = true; // Muted allows instant autoplay without browser block
+    video.muted = true;
     video.playsInline = true;
 
     audio.srcObject = remoteStream;
@@ -817,7 +829,6 @@ function handleIncomingCall(call) {
   document.getElementById('btn-accept-call').classList.remove('hidden');
 }
 
-// Fixed Accept Call: viewer can accept instantly without black screen
 document.getElementById('btn-accept-call').onclick = async () => {
   stopRingtone();
   const call = _pendingCall;
@@ -842,27 +853,28 @@ document.getElementById('btn-accept-call').onclick = async () => {
   if (conn && conn.open) conn.send({ type: 'call_accepted', isGroup: isGroupCallActive });
 };
 
-// === 100% FIXED SCREEN SHARING (NO BLACK SCREEN) ===
+// === TWO-WAY SCREEN SHARING (LAPTOP, PC & ANDROID MOBILE) ===
 async function triggerUniversalScreenShare() {
-  if (!navigator.mediaDevices.getDisplayMedia) return alert("Screen sharing is not supported by your browser.");
-  if (!currentPeerId) return alert("Please select a peer first.");
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+    return alert("Screen sharing is supported on Laptop, PC, and Android Chrome. iPhone Safari does not support sharing screens (viewing is supported).");
+  }
+  if (!currentPeerId) return alert("Please select or connect to a peer first.");
 
   try {
     let ds = null;
+    // Mobile-friendly displayMedia (No cursor constraints that crash Android)
     try {
-      ds = await navigator.mediaDevices.getDisplayMedia({
-        video: { cursor: 'always' },
-        audio: false // Avoid audio constraint errors
-      });
+      ds = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
     } catch(err) {
-      console.warn("Screen share prompt cancelled.");
+      console.warn("Screen share cancelled:", err);
       return;
     }
+
+    if (!ds || !ds.getVideoTracks().length) return;
 
     screenStream = ds;
     isScreenSharing = true;
 
-    // Attach silent audio track so WebRTC media connection stays stable
     const silentAudio = createSilentAudioTrack();
     if (silentAudio) ds.addTrack(silentAudio);
 
@@ -871,7 +883,7 @@ async function triggerUniversalScreenShare() {
     document.getElementById('call-modal').classList.remove('hidden');
     document.getElementById('call-status-title').textContent = "Broadcasting Screen...";
     
-    // Show local preview of shared screen
+    // Show local preview of our own screen
     const localVid = document.getElementById('local-stream-video');
     localVid.srcObject = ds;
     localVid.muted = true;
@@ -881,17 +893,19 @@ async function triggerUniversalScreenShare() {
     const conn = getActiveConn();
     if (conn && conn.open) conn.send({ type: 'screen_state', isSharing: true });
 
-    // Scenario A: If call is already active, replace video track seamlessly
+    // Scenario A: Call already active -> Replace video track bidirectionally
     if (Object.keys(activeCalls).length > 0) {
       Object.values(activeCalls).forEach(call => {
         if (call.peerConnection) {
           const senders = call.peerConnection.getSenders();
           const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-          if (videoSender) videoSender.replaceTrack(screenTrack);
+          if (videoSender) {
+            videoSender.replaceTrack(screenTrack);
+          }
         }
       });
     } 
-    // Scenario B: If no call active, initiate screen call directly
+    // Scenario B: No call active -> Start screen call
     else {
       localStream = ds;
       if (conn && conn.open) conn.send({ type: 'call_ring', isScreen: true });
@@ -901,7 +915,7 @@ async function triggerUniversalScreenShare() {
 
     updateHardwareStatusPill();
 
-    // Browser's native "Stop sharing" event
+    // Native browser "Stop Sharing" button
     screenTrack.onended = () => {
       stopScreenShare();
     };
@@ -1233,7 +1247,13 @@ adminBtn.onclick = () => {
 };
 
 const ds = document.getElementById('select-device-type');
-if (ds) { ds.value = adminDevice; ds.onchange = (e) => { localStorage.setItem('ghost_admin_device', e.target.value); location.reload(); }; }
+if (ds) { 
+  ds.value = adminDevice; 
+  ds.onchange = (e) => { 
+    localStorage.setItem('ghost_admin_device', e.target.value); 
+    location.reload(); 
+  }; 
+}
 
 document.getElementById('my-peer-id').textContent = myId;
 document.getElementById('btn-copy-id').onclick = () => { navigator.clipboard.writeText(myId); alert("Copied"); };

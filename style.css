@@ -1330,3 +1330,16 @@ body {
 .my-id-box strong, .c-id, .msg {
   user-select: text !important;
 }
+/* Mobile Video Screen Sizing Fix (Prevents desktop screen from getting cut off on phones) */
+.video-card video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  background: #000;
+}
+
+@media (max-width: 768px) {
+  .video-card video {
+    object-fit: contain !important;
+  }
+}
