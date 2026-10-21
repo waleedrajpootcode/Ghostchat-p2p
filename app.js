@@ -1,5 +1,5 @@
 // ============================================================
-// GHOSTNODE v8.0 — Enterprise P2P (Full Screen Share & Media Fix)
+// GHOSTNODE v8.5 — Ultra Stable P2P (Screen Share & Video Core Fix)
 // ============================================================
 const ADMIN_PIN = "2007";
 let isAdmin = sessionStorage.getItem('ghost_is_admin') === 'true';
@@ -51,7 +51,7 @@ if (installBtn) {
     }
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    console.log(`PWA install outcome: ${outcome}`);
+    console.log(`PWA install: ${outcome}`);
     deferredPrompt = null;
     installBtn.classList.add('hidden');
   });
@@ -107,7 +107,7 @@ function switchToPeer(peerId, name) {
   if (isAdmin) renderContacts();
 }
 
-// === PEER INIT (FULL NAT / FIREWALL BYPASS) ===
+// === PEER INITIALIZATION ===
 const peer = new Peer(myId, {
   config: {
     iceServers: [
@@ -117,18 +117,12 @@ const peer = new Peer(myId, {
       { urls: 'stun:stun3.l.google.com:19302' },
       { urls: 'stun:stun4.l.google.com:19302' },
       { urls: 'stun:global.stun.twilio.com:3478' },
-      { urls: 'stun:stun.relay.metered.ca:80' },
-      { urls: 'turn:relay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:relay.metered.ca:80?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:relay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:relay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turns:relay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'stun:openrelay.metered.ca:80' },
       { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
       { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
       { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
     ],
-    iceCandidatePoolSize: 10,
-    sdpSemantics: 'unified-plan'
+    iceCandidatePoolSize: 10
   },
   debug: 0
 });
@@ -160,10 +154,6 @@ peer.on('error', (err) => {
   if (err.type === 'unavailable-id') {
     localStorage.removeItem('ghost_my_id');
     setTimeout(() => location.reload(), 800);
-    return;
-  }
-  if (['network', 'server-error', 'socket-error'].includes(err.type)) {
-    setTimeout(() => { try { peer.reconnect(); } catch(e) {} }, 3000);
     return;
   }
   console.warn('Peer error:', err.type, err.message);
@@ -237,6 +227,7 @@ function setupConnection(conn, name = null) {
 
     activeConns[conn.peer] = conn;
 
+    // Auto-discovery in Admin contact list
     if (isAdmin && !contacts.some(c => c.id === conn.peer)) {
       contacts.push({ name: name || `Node (${conn.peer.slice(-4)})`, id: conn.peer });
       localStorage.setItem('ghost_admin_contacts', JSON.stringify(contacts));
@@ -347,8 +338,8 @@ function handleIncomingData(data, conn) {
   }
   else if (data.type === 'call_ring') {
     playRingtone();
-    const title = data.isScreen ? "Screen Sharing Session" : "Incoming Call";
-    sendDesktopNotification(title, "Click to join session");
+    const title = data.isScreen ? "Incoming Screen Share" : "Incoming Call";
+    sendDesktopNotification(title, "Click to join live session");
   }
   else if (data.type === 'call_accepted') {
     document.getElementById('call-status-title').textContent = "Live Session Active";
@@ -684,139 +675,87 @@ const ringtone = document.getElementById('ringtone');
 function playRingtone() { ringtone.play().catch(() => playLoudChime()); }
 function stopRingtone() { ringtone.pause(); ringtone.currentTime = 0; }
 
-let _ghostAudioCtx = null;
-function createSilentAudioStream() {
+async function getMediaStream(audioOnly = false) {
   try {
-    if (!_ghostAudioCtx) _ghostAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (_ghostAudioCtx.state === 'suspended') _ghostAudioCtx.resume();
-    const osc = _ghostAudioCtx.createOscillator();
-    const gain = _ghostAudioCtx.createGain();
-    gain.gain.value = 0.0001;
-    const dst = _ghostAudioCtx.createMediaStreamDestination();
-    osc.connect(gain); gain.connect(dst); osc.start();
-    window._ghostSilentOsc = osc;
-    return dst.stream;
-  } catch(e) { return new MediaStream(); }
+    return await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true },
+      video: audioOnly ? false : { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
+    });
+  } catch(e) {
+    console.warn("Camera fallback to audio only:", e);
+    return await navigator.mediaDevices.getUserMedia({ audio: true });
+  }
 }
 
-function createSyntheticVideoStream() {
-  const c = document.createElement('canvas');
-  c.width = 640; c.height = 480;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#0b0e14'; ctx.fillRect(0, 0, 640, 480);
-  ctx.fillStyle = '#58a6ff'; ctx.font = '20px monospace';
-  ctx.fillText('💻 GhostNode Stream', 200, 240);
-  return c.captureStream(10);
-}
-
-async function getAdaptiveMediaStream(wantAudio = true, wantVideo = true) {
-  const stream = new MediaStream();
-  try {
-    const cons = {};
-    if (wantAudio) cons.audio = { echoCancellation: true, noiseSuppression: true };
-    if (wantVideo) cons.video = { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } };
-    const real = await navigator.mediaDevices.getUserMedia(cons);
-    real.getTracks().forEach(t => stream.addTrack(t));
-  } catch(e) { console.warn('getUserMedia fallback:', e.name); }
-  
-  if (wantAudio && !stream.getAudioTracks().length) {
-    createSilentAudioStream().getAudioTracks().forEach(t => stream.addTrack(t));
-  }
-  if (wantVideo && !stream.getVideoTracks().length) {
-    try { createSyntheticVideoStream().getVideoTracks().forEach(t => stream.addTrack(t)); } catch(e) {}
-  }
-  return stream;
-}
-
-// === CALLS ===
-document.getElementById('btn-start-call').onclick = async () => {
-  if (!currentPeerId) return alert("Select a peer first");
-  const conn = getActiveConn();
-  if (!conn || !conn.open) return alert("Not connected");
-  isGroupCallActive = false;
-  try { conn.send({ type: 'call_ring', isGroup: false }); } catch(e) {}
-  document.getElementById('call-modal').classList.remove('hidden');
-  document.getElementById('call-status-title').textContent = "Pinging Peer...";
-  document.getElementById('btn-accept-call').classList.add('hidden');
-  try { localStream = await getAdaptiveMediaStream(true, true); }
-  catch(e) { return alert("Media error: " + e.message); }
-  
-  if (localStream.getVideoTracks().some(t => t.readyState === 'live')) {
-    document.getElementById('local-stream-video').srcObject = localStream;
-    document.getElementById('local-preview-card').classList.remove('hidden');
-  }
-  isMicOn = true; isCamOn = true;
-  document.getElementById('btn-toggle-mic').textContent = "🎙️ Mic: ON";
-  document.getElementById('btn-toggle-mic').classList.add('active');
-  document.getElementById('btn-toggle-cam').textContent = "📷 Cam: ON";
-  document.getElementById('btn-toggle-cam').classList.add('active');
-  updateHardwareStatusPill();
-  try {
-    const call = peer.call(currentPeerId, localStream);
-    bindCallEvents(call, currentPeerId);
-  } catch(e) { alert("Call failed: " + e.message); }
-};
-
-function handleIncomingCall(call) {
-  activeCalls[call.peer] = call;
-  bindCallEvents(call, call.peer);
-  const modalOpen = !document.getElementById('call-modal').classList.contains('hidden');
-  if (modalOpen && localStream) {
-    try { call.answer(localStream); updateGroupCountPill(); } catch(e) {}
-    return;
-  }
-  playRingtone();
-  _pendingCall = call;
-  document.getElementById('call-modal').classList.remove('hidden');
-  document.getElementById('call-status-title').textContent = `Incoming: ${getContactName(call.peer) || call.peer}`;
-  document.getElementById('btn-accept-call').classList.remove('hidden');
-}
-
-document.getElementById('btn-accept-call').onclick = async () => {
-  stopRingtone();
-  const call = _pendingCall;
-  if (!call) return;
-  
-  if (!localStream) {
-    try { localStream = await getAdaptiveMediaStream(true, true); }
-    catch(e) { localStream = await getAdaptiveMediaStream(false, false); }
-  }
-
-  try { call.answer(localStream); }
-  catch(e) { return alert("Answer failed: " + e.message); }
-  _pendingCall = null;
-  document.getElementById('btn-accept-call').classList.add('hidden');
-  document.getElementById('call-status-title').textContent = "Live Session Active";
-  
-  if (localStream && localStream.getVideoTracks().some(t => t.readyState === 'live')) {
-    document.getElementById('local-stream-video').srcObject = localStream;
-    document.getElementById('local-preview-card').classList.remove('hidden');
-  }
-  updateHardwareStatusPill();
-  const conn = activeConns[call.peer];
-  if (conn && conn.open) conn.send({ type: 'call_accepted', isGroup: isGroupCallActive });
-};
-
-// Fixed Remote Video Autoplay & Stream Handling
+// === CRITICAL FIX: DIRECT WEBRTC TRACK BINDING (NO BLACK SCREEN) ===
 function bindCallEvents(call, peerId, name = null) {
   activeCalls[peerId] = call;
+
+  // Listen directly to underlying WebRTC ontrack (bypasses PeerJS audio-first stream drop)
+  if (call.peerConnection) {
+    call.peerConnection.ontrack = (event) => {
+      console.log('🎥 WebRTC Track Received:', event.track.kind);
+      
+      if (event.track.kind === 'video') {
+        const video = document.getElementById('remote-stream-video');
+        let stream = video.srcObject;
+        if (!stream || !(stream instanceof MediaStream)) {
+          stream = new MediaStream();
+          video.srcObject = stream;
+        }
+        
+        // Remove older video tracks and add new one
+        stream.getVideoTracks().forEach(t => stream.removeTrack(t));
+        stream.addTrack(event.track);
+
+        video.muted = true; // Avoid autoplay policy restriction
+        video.playsInline = true;
+
+        video.onloadedmetadata = () => {
+          video.play().catch(e => console.warn("Video play err:", e));
+        };
+        video.play().catch(() => {});
+
+        document.getElementById('call-modal').classList.remove('hidden');
+        document.getElementById('call-status-title').textContent = "Live Session Active";
+        document.getElementById('remote-stream-label').textContent = `${name || getContactName(peerId) || peerId} (Live)`;
+      } 
+      else if (event.track.kind === 'audio') {
+        const audio = document.getElementById('remote-audio-player');
+        let stream = audio.srcObject;
+        if (!stream || !(stream instanceof MediaStream)) {
+          stream = new MediaStream();
+          audio.srcObject = stream;
+        }
+        stream.getAudioTracks().forEach(t => stream.removeTrack(t));
+        stream.addTrack(event.track);
+        audio.play().catch(() => {
+          document.getElementById('btn-unmute-audio').classList.remove('hidden');
+        });
+      }
+      updateGroupCountPill();
+    };
+  }
+
+  // Fallback for standard PeerJS stream event
   call.on('stream', (remote) => {
     const video = document.getElementById('remote-stream-video');
     const audio = document.getElementById('remote-audio-player');
-    
-    // Remote video MUST be muted so browser Autoplay Policy NEVER blocks it
-    video.srcObject = remote;
-    video.playsInline = true;
-    video.muted = true;
-    
-    // Audio plays separately
-    audio.srcObject = remote;
-    audio.playsInline = true;
-    
-    video.play().catch(e => console.warn("Video play err:", e));
-    audio.play().catch(() => {
-      document.getElementById('btn-unmute-audio').classList.remove('hidden');
-    });
+
+    if (remote.getVideoTracks().length > 0) {
+      video.srcObject = remote;
+      video.muted = true;
+      video.playsInline = true;
+      video.onloadedmetadata = () => video.play().catch(() => {});
+      video.play().catch(() => {});
+    }
+
+    if (remote.getAudioTracks().length > 0) {
+      audio.srcObject = remote;
+      audio.play().catch(() => {
+        document.getElementById('btn-unmute-audio').classList.remove('hidden');
+      });
+    }
 
     document.getElementById('call-modal').classList.remove('hidden');
     document.getElementById('call-status-title').textContent = "Live Session Active";
@@ -866,39 +805,188 @@ function updateHardwareStatusPill() {
   }
 }
 
-// === GROUP CALL ===
-document.getElementById('btn-group-call').onclick = async () => {
-  if (!isAdmin || !contacts.length) return alert("Add contacts first!");
-  isGroupCallActive = true;
+// === CALLS ===
+document.getElementById('btn-start-call').onclick = async () => {
+  if (!currentPeerId) return alert("Select a peer first");
+  const conn = getActiveConn();
+  if (!conn || !conn.open) return alert("Not connected");
+  isGroupCallActive = false;
+  
+  try { conn.send({ type: 'call_ring', isGroup: false }); } catch(e) {}
   document.getElementById('call-modal').classList.remove('hidden');
-  document.getElementById('call-status-title').textContent = "Dialing Group Mesh...";
+  document.getElementById('call-status-title').textContent = "Pinging Peer...";
   document.getElementById('btn-accept-call').classList.add('hidden');
-  localStream = await getAdaptiveMediaStream(true, true);
+
+  try { localStream = await getMediaStream(); }
+  catch(e) { return alert("Media error: " + e.message); }
+  
+  if (localStream.getVideoTracks().some(t => t.readyState === 'live')) {
+    document.getElementById('local-stream-video').srcObject = localStream;
+    document.getElementById('local-preview-card').classList.remove('hidden');
+  }
+  isMicOn = true; isCamOn = true;
+  document.getElementById('btn-toggle-mic').textContent = "🎙️ Mic: ON";
+  document.getElementById('btn-toggle-mic').classList.add('active');
+  document.getElementById('btn-toggle-cam').textContent = "📷 Cam: ON";
+  document.getElementById('btn-toggle-cam').classList.add('active');
   updateHardwareStatusPill();
-  contacts.forEach(c => {
-    if (activeConns[c.id] && activeConns[c.id].open) {
-      try {
-        activeConns[c.id].send({ type: 'call_ring', isGroup: true });
-        const call = peer.call(c.id, localStream);
-        bindCallEvents(call, c.id, c.name);
-      } catch(e) {}
-    }
-  });
+
+  try {
+    const call = peer.call(currentPeerId, localStream);
+    bindCallEvents(call, currentPeerId);
+  } catch(e) { alert("Call failed: " + e.message); }
 };
 
-// === IN-CALL ADD PERSON ===
-document.getElementById('btn-in-call-add').onclick = async () => {
-  const targetId = prompt("Enter Node ID to add to this call:");
-  if (!targetId || targetId === myId) return;
-  if (!localStream) localStream = await getAdaptiveMediaStream(true, true);
+function handleIncomingCall(call) {
+  activeCalls[call.peer] = call;
+  bindCallEvents(call, call.peer);
+
+  const modalOpen = !document.getElementById('call-modal').classList.contains('hidden');
+  if (modalOpen && localStream) {
+    try { call.answer(localStream); updateGroupCountPill(); } catch(e) {}
+    return;
+  }
+
+  playRingtone();
+  _pendingCall = call;
+  document.getElementById('call-modal').classList.remove('hidden');
+  document.getElementById('call-status-title').textContent = `Incoming: ${getContactName(call.peer) || call.peer}`;
+  document.getElementById('btn-accept-call').classList.remove('hidden');
+}
+
+// Fixed Accept Call: viewer can answer immediately without needing camera
+document.getElementById('btn-accept-call').onclick = async () => {
+  stopRingtone();
+  const call = _pendingCall;
+  if (!call) return;
+  
+  // Try audio stream if available, otherwise answer without stream (receive only)
+  if (!localStream) {
+    try { localStream = await getMediaStream(true); }
+    catch(e) { localStream = null; }
+  }
+
   try {
-    const c = peer.connect(targetId, { reliable: true });
-    c.on('open', () => c.send({ type: 'call_ring', isGroup: true }));
-    const call = peer.call(targetId, localStream);
-    bindCallEvents(call, targetId, targetId);
-    alert(`Dialing ${targetId} into session`);
-  } catch(e) { alert("Failed: " + e.message); }
+    if (localStream) {
+      call.answer(localStream);
+      if (localStream.getVideoTracks().some(t => t.readyState === 'live')) {
+        document.getElementById('local-stream-video').srcObject = localStream;
+        document.getElementById('local-preview-card').classList.remove('hidden');
+      }
+    } else {
+      call.answer(); // Pure receive mode
+    }
+  } catch(e) {
+    return alert("Answer failed: " + e.message);
+  }
+
+  _pendingCall = null;
+  document.getElementById('btn-accept-call').classList.add('hidden');
+  document.getElementById('call-status-title').textContent = "Live Session Active";
+  updateHardwareStatusPill();
+
+  const conn = activeConns[call.peer];
+  if (conn && conn.open) conn.send({ type: 'call_accepted', isGroup: isGroupCallActive });
 };
+
+// === 100% FIXED SCREEN SHARING (NO BLACK SCREEN) ===
+async function triggerUniversalScreenShare() {
+  if (!navigator.mediaDevices.getDisplayMedia) return alert("Screen sharing is not supported by your browser.");
+  if (!currentPeerId) return alert("Please select a peer first.");
+
+  try {
+    let ds = null;
+    try {
+      ds = await navigator.mediaDevices.getDisplayMedia({
+        video: { cursor: 'always', frameRate: 30 },
+        audio: true
+      });
+    } catch(err) {
+      ds = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    }
+
+    screenStream = ds;
+    isScreenSharing = true;
+
+    const screenTrack = ds.getVideoTracks()[0];
+    const screenAudio = ds.getAudioTracks()[0];
+
+    document.getElementById('call-modal').classList.remove('hidden');
+    document.getElementById('call-status-title').textContent = "Broadcasting Screen...";
+    
+    // Show local preview of shared screen
+    const localVid = document.getElementById('local-stream-video');
+    localVid.srcObject = ds;
+    localVid.muted = true;
+    localVid.play().catch(() => {});
+    document.getElementById('local-preview-card').classList.remove('hidden');
+    
+    const conn = getActiveConn();
+    if (conn && conn.open) conn.send({ type: 'screen_state', isSharing: true });
+
+    // Scenario A: If call is already active, replace video tracks
+    if (Object.keys(activeCalls).length > 0) {
+      Object.values(activeCalls).forEach(call => {
+        if (call.peerConnection) {
+          const senders = call.peerConnection.getSenders();
+          const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+          if (videoSender) videoSender.replaceTrack(screenTrack);
+          if (screenAudio) {
+            const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+            if (audioSender) audioSender.replaceTrack(screenAudio);
+          }
+        }
+      });
+    } 
+    // Scenario B: If no call active, initiate screen call directly
+    else {
+      localStream = ds;
+      if (conn && conn.open) conn.send({ type: 'call_ring', isScreen: true });
+      const sc = peer.call(currentPeerId, ds);
+      bindCallEvents(sc, currentPeerId);
+    }
+
+    updateHardwareStatusPill();
+
+    // Browser's "Stop sharing" event
+    screenTrack.onended = () => {
+      stopScreenShare();
+    };
+
+  } catch(err) {
+    if (err.name !== 'NotAllowedError') console.error("Screen share error:", err);
+  }
+}
+
+function stopScreenShare() {
+  isScreenSharing = false;
+  document.getElementById('call-status-title').textContent = "Live Session Active";
+
+  const conn = getActiveConn();
+  if (conn && conn.open) conn.send({ type: 'screen_state', isSharing: false });
+
+  if (localStream) {
+    const camTrack = localStream.getVideoTracks().find(t => t.readyState === 'live');
+    if (camTrack) {
+      Object.values(activeCalls).forEach(call => {
+        if (call.peerConnection) {
+          const s = call.peerConnection.getSenders().find(x => x.track && x.track.kind === 'video');
+          if (s) s.replaceTrack(camTrack);
+        }
+      });
+      document.getElementById('local-stream-video').srcObject = localStream;
+    }
+  }
+
+  if (screenStream) {
+    screenStream.getTracks().forEach(t => t.stop());
+    screenStream = null;
+  }
+  updateHardwareStatusPill();
+}
+
+document.getElementById('btn-screen-share').onclick = triggerUniversalScreenShare;
+document.getElementById('btn-screen-in-call').onclick = triggerUniversalScreenShare;
 
 // === MIC/CAM TOGGLES ===
 document.getElementById('btn-toggle-mic').onclick = () => {
@@ -923,108 +1011,39 @@ document.getElementById('btn-toggle-cam').onclick = () => {
   updateHardwareStatusPill();
 };
 
-// === 100% FIXED & STABLE SCREEN SHARING ===
-async function triggerUniversalScreenShare() {
-  if (!navigator.mediaDevices.getDisplayMedia) return alert("Screen sharing is not supported by your browser.");
-  if (!currentPeerId) return alert("Please select a peer first.");
-
-  try {
-    // Robust display capture with fallback for audio constraints
-    let ds = null;
-    try {
-      ds = await navigator.mediaDevices.getDisplayMedia({
-        video: { cursor: 'always', frameRate: 30 },
-        audio: true
-      });
-    } catch(err) {
-      // If user unchecks audio or OS doesn't support display audio:
-      ds = await navigator.mediaDevices.getDisplayMedia({ video: true });
-    }
-
-    screenStream = ds;
-    isScreenSharing = true;
-
-    const screenTrack = ds.getVideoTracks()[0];
-    const screenAudio = ds.getAudioTracks()[0];
-
-    document.getElementById('call-modal').classList.remove('hidden');
-    document.getElementById('call-status-title').textContent = "Broadcasting Screen...";
-    
-    // Show local preview of screen
-    const localVid = document.getElementById('local-stream-video');
-    localVid.srcObject = ds;
-    document.getElementById('local-preview-card').classList.remove('hidden');
-    
-    const conn = getActiveConn();
-    if (conn && conn.open) conn.send({ type: 'screen_state', isSharing: true });
-
-    // Scenario A: Call is already ACTIVE -> swap video tracks seamlessly
-    if (Object.keys(activeCalls).length > 0) {
-      Object.values(activeCalls).forEach(call => {
-        if (call.peerConnection) {
-          const senders = call.peerConnection.getSenders();
-          const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-          if (videoSender) videoSender.replaceTrack(screenTrack);
-          if (screenAudio) {
-            const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
-            if (audioSender) audioSender.replaceTrack(screenAudio);
-          }
-        }
-      });
-    } 
-    // Scenario B: No call active -> initiate screen call with silent audio attached
-    else {
-      if (ds.getAudioTracks().length === 0) {
-        createSilentAudioStream().getAudioTracks().forEach(t => ds.addTrack(t));
-      }
-      localStream = ds;
-      if (conn && conn.open) conn.send({ type: 'call_ring', isScreen: true });
-      const sc = peer.call(currentPeerId, ds);
-      bindCallEvents(sc, currentPeerId);
-    }
-
-    updateHardwareStatusPill();
-
-    // Auto-revert when user clicks browser's native "Stop sharing" button
-    screenTrack.onended = () => {
-      stopScreenShare();
-    };
-
-  } catch(err) {
-    if (err.name !== 'NotAllowedError') console.error("Screen share error:", err);
-  }
-}
-
-function stopScreenShare() {
-  isScreenSharing = false;
-  document.getElementById('call-status-title').textContent = "Live Session Active";
-
-  const conn = getActiveConn();
-  if (conn && conn.open) conn.send({ type: 'screen_state', isSharing: false });
-
-  // Revert back to camera track if active
-  if (localStream) {
-    const camTrack = localStream.getVideoTracks().find(t => t.readyState === 'live');
-    if (camTrack) {
-      Object.values(activeCalls).forEach(call => {
-        if (call.peerConnection) {
-          const s = call.peerConnection.getSenders().find(x => x.track && x.track.kind === 'video');
-          if (s) s.replaceTrack(camTrack);
-        }
-      });
-      document.getElementById('local-stream-video').srcObject = localStream;
-    }
-  }
-
-  if (screenStream) {
-    screenStream.getTracks().forEach(t => t.stop());
-    screenStream = null;
-  }
+// === GROUP CALL ===
+document.getElementById('btn-group-call').onclick = async () => {
+  if (!isAdmin || !contacts.length) return alert("Add contacts first!");
+  isGroupCallActive = true;
+  document.getElementById('call-modal').classList.remove('hidden');
+  document.getElementById('call-status-title').textContent = "Dialing Group Mesh...";
+  document.getElementById('btn-accept-call').classList.add('hidden');
+  localStream = await getMediaStream();
   updateHardwareStatusPill();
-}
+  contacts.forEach(c => {
+    if (activeConns[c.id] && activeConns[c.id].open) {
+      try {
+        activeConns[c.id].send({ type: 'call_ring', isGroup: true });
+        const call = peer.call(c.id, localStream);
+        bindCallEvents(call, c.id, c.name);
+      } catch(e) {}
+    }
+  });
+};
 
-document.getElementById('btn-screen-share').onclick = triggerUniversalScreenShare;
-document.getElementById('btn-screen-in-call').onclick = triggerUniversalScreenShare;
+// === IN-CALL ADD PERSON ===
+document.getElementById('btn-in-call-add').onclick = async () => {
+  const targetId = prompt("Enter Node ID to add to this call:");
+  if (!targetId || targetId === myId) return;
+  if (!localStream) localStream = await getMediaStream();
+  try {
+    const c = peer.connect(targetId, { reliable: true });
+    c.on('open', () => c.send({ type: 'call_ring', isGroup: true }));
+    const call = peer.call(targetId, localStream);
+    bindCallEvents(call, targetId, targetId);
+    alert(`Dialing ${targetId} into session`);
+  } catch(e) { alert("Failed: " + e.message); }
+};
 
 // === END CALL ===
 document.getElementById('btn-end-call').onclick = () => {
