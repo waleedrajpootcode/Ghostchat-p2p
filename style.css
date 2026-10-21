@@ -1301,3 +1301,32 @@ body {
 .my-id-box strong, .c-id, .msg {
   user-select: text !important;
 }
+/* Top Install Button */
+.brand-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-install {
+  background: linear-gradient(135deg, #00ff88, #2ea043);
+  color: #030712;
+  border: none;
+  font-weight: 800;
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  box-shadow: 0 0 12px rgba(0, 255, 136, 0.4);
+  transition: all 0.18s ease;
+}
+
+.btn-install:hover {
+  transform: translateY(-1px) scale(1.03);
+  box-shadow: 0 0 18px rgba(0, 255, 136, 0.6);
+}
+
+.my-id-box strong, .c-id, .msg {
+  user-select: text !important;
+}

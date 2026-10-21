@@ -1,10 +1,11 @@
 // ============================================================
-// GHOSTNODE v7.3 — Complete Build (All Features Restored & Fixed)
+// GHOSTNODE v7.5 — Enterprise P2P (Cross-Network TURN Fix)
 // ============================================================
 const ADMIN_PIN = "2007";
 let isAdmin = sessionStorage.getItem('ghost_is_admin') === 'true';
 let adminDevice = localStorage.getItem('ghost_admin_device') || 'PC';
 let myId = localStorage.getItem('ghost_my_id');
+
 if (!myId) {
   myId = isAdmin ? (adminDevice === 'PC' ? 'admin_pc' : 'admin_laptop') : 'node_' + Math.floor(1000 + Math.random() * 9000);
   localStorage.setItem('ghost_my_id', myId);
@@ -65,12 +66,11 @@ function getActiveConn() { return currentPeerId ? activeConns[currentPeerId] : n
 function queueOrSend(payload) {
   const conn = getActiveConn();
   if (conn && conn.open) {
-    try { conn.send(payload); console.log('📤 Sent:', payload.type); return true; }
+    try { conn.send(payload); return true; }
     catch(e) { console.error('Send fail:', e); }
   }
   pendingMessages.push({ peerId: currentPeerId, payload });
   localStorage.setItem('ghost_pending_msgs', JSON.stringify(pendingMessages));
-  console.log('📬 Queued:', payload.type);
   return false;
 }
 
@@ -106,42 +106,55 @@ function switchToPeer(peerId, name) {
   if (isAdmin) renderContacts();
 }
 
-// === PEER INIT ===
+// === PEER INIT (FULL NAT / FIREWALL BYPASS FOR DISTANT HOUSES) ===
 const peer = new Peer(myId, {
   config: {
     iceServers: [
+      // Standard STUN servers
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
       { urls: 'stun:stun3.l.google.com:19302' },
       { urls: 'stun:stun4.l.google.com:19302' },
-      { urls: 'stun:global.stun.twilio.com:3478' }
+      { urls: 'stun:global.stun.twilio.com:3478' },
+      { urls: 'stun:stun.relay.metered.ca:80' },
+      // Enterprise TURN Relays (Bypasses Pakistan ISP CGNAT & Mobile 4G)
+      { urls: 'turn:relay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:relay.metered.ca:80?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:relay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:relay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turns:relay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
     ],
-    iceCandidatePoolSize: 10
+    iceCandidatePoolSize: 10,
+    sdpSemantics: 'unified-plan'
   },
   debug: 0
 });
 
 peer.on('open', (id) => {
-  console.log('✅ Ready:', id);
+  console.log('✅ GhostNode Online:', id);
   document.getElementById('my-peer-id').textContent = id;
   attemptConnectAll();
-  setInterval(attemptConnectAll, 3000);
+  setInterval(attemptConnectAll, 4000);
 });
+
 peer.on('connection', (conn) => setupConnection(conn));
 peer.on('call', (call) => handleIncomingCall(call));
-peer.on('disconnected', () => setTimeout(() => { try { peer.reconnect(); } catch(e) { location.reload(); } }, 1500));
+
+peer.on('disconnected', () => {
+  setTimeout(() => { try { peer.reconnect(); } catch(e) {} }, 1500);
+});
+
 peer.on('error', (err) => {
   if (err.type === 'peer-unavailable') {
     const match = err.message.match(/peer (\S+)/);
     if (match) {
       const peerId = match[1];
       delete connectingTo[peerId];
-      const n = (peerBackoff[peerId + '_n'] || 0) + 1;
-      peerBackoff[peerId + '_n'] = n;
-      const wait = Math.min(3000 * Math.pow(1.5, n - 1), 10000);
-      peerBackoff[peerId] = Date.now() + wait;
-      console.log(`⏳ ${peerId} offline, retry in ${Math.round(wait/1000)}s`);
+      peerBackoff[peerId] = Date.now() + 4000;
     }
     return;
   }
@@ -160,83 +173,117 @@ peer.on('error', (err) => {
 // === CONNECTIONS ===
 const connectingTo = {};
 const peerBackoff = {};
+
 function attemptConnectAll() {
   if (isAdmin) {
-    contacts.forEach(c => { if (!activeConns[c.id] || !activeConns[c.id].open) silentConnect(c.id, c.name); });
+    contacts.forEach(c => {
+      if (!activeConns[c.id] || !activeConns[c.id].open) silentConnect(c.id, c.name);
+    });
   } else {
-    // Guest: if connected to ANY admin, STOP trying the other
+    // Guest tries Admin PC first; if connected, stops
     const connectedToAdmin = Object.keys(activeConns).some(id =>
       (id === 'admin_pc' || id === 'admin_laptop') && activeConns[id].open
     );
     if (connectedToAdmin) return;
+    
     ['admin_pc', 'admin_laptop'].forEach(id => {
-      if (!activeConns[id] || !activeConns[id].open) silentConnect(id, id === 'admin_pc' ? 'Admin PC' : 'Admin Laptop');
+      if (!activeConns[id] || !activeConns[id].open) {
+        silentConnect(id, id === 'admin_pc' ? 'Admin PC' : 'Admin Laptop');
+      }
     });
   }
 }
 
-// Fixed silentConnect: timer is properly cleared on connection open!
-function silentConnect(targetId, name) {
+// Stable Connection Creator
+function silentConnect(targetId, name = null) {
   if (!targetId || targetId === myId) return;
   if (activeConns[targetId] && activeConns[targetId].open) return;
   if (connectingTo[targetId]) return;
   if (peerBackoff[targetId] && peerBackoff[targetId] > Date.now()) return;
+
   connectingTo[targetId] = true;
   let conn;
-  try { conn = peer.connect(targetId, { reliable: true }); } catch(e) { delete connectingTo[targetId]; return; }
+  try {
+    conn = peer.connect(targetId, { reliable: true });
+  } catch(e) {
+    delete connectingTo[targetId];
+    return;
+  }
 
-  // Safe timeout: ONLY close if it never opens within 10 seconds
+  // Safety timer ONLY if connection hangs
   const connectTimeout = setTimeout(() => {
     if (connectingTo[targetId]) {
       delete connectingTo[targetId];
       try { conn.close(); } catch(e) {}
     }
-  }, 10000);
+  }, 12000);
 
   conn.on('open', () => {
-    clearTimeout(connectTimeout); // CANCEL timer so connection never dies!
+    clearTimeout(connectTimeout);
     delete connectingTo[targetId];
     delete peerBackoff[targetId];
-    delete peerBackoff[targetId + '_n'];
   });
+
   conn.on('error', () => {
     clearTimeout(connectTimeout);
     delete connectingTo[targetId];
   });
+
   setupConnection(conn, name);
 }
 
 function setupConnection(conn, name = null) {
   conn.on('open', () => {
+    // Do not replace if already open
+    if (activeConns[conn.peer] && activeConns[conn.peer].open && activeConns[conn.peer] !== conn) {
+      try { conn.close(); } catch(e) {}
+      return;
+    }
+
     activeConns[conn.peer] = conn;
+
+    // AUTO-DISCOVERY: Admin automatically saves the connected friend
+    if (isAdmin && !contacts.some(c => c.id === conn.peer)) {
+      contacts.push({ name: name || `Node (${conn.peer.slice(-4)})`, id: conn.peer });
+      localStorage.setItem('ghost_admin_contacts', JSON.stringify(contacts));
+      renderContacts();
+    }
+
     if (!currentPeerId) currentPeerId = conn.peer;
+
     const label = isAdmin ? `Admin (${adminDevice})` : 'Peer Node';
     try { conn.send({ type: 'handshake', deviceLabel: label }); } catch(e) {}
+
     if (currentPeerId === conn.peer) {
       updateOnlineUI(name || getContactName(conn.peer) || conn.peer);
       toggleInputs(true);
       loadContactMessages(conn.peer);
       const e = document.querySelector('.empty-state'); if (e) e.remove();
     }
+
     if (isAdmin) renderContacts();
     flushPendingFor(conn.peer);
     startLatencyTracker(conn.peer);
     generateE2EEFingerprint(myId, conn.peer);
   });
+
   conn.on('data', (data) => handleIncomingData(data, conn));
+
   conn.on('close', () => {
-    delete activeConns[conn.peer];
-    delete peerBackoff[conn.peer];
-    delete peerBackoff[conn.peer + '_n'];
-    if (currentPeerId === conn.peer) {
-      document.getElementById('connection-status').textContent = '● Scanning...';
-      document.getElementById('connection-status').className = 'status-offline';
-      document.getElementById('latency-badge').classList.add('hidden');
-      document.getElementById('e2ee-fingerprint').classList.add('hidden');
-      toggleInputs(false);
+    // Only cleanup if this exact connection closed
+    if (activeConns[conn.peer] === conn) {
+      delete activeConns[conn.peer];
+      delete peerBackoff[conn.peer];
+      if (currentPeerId === conn.peer) {
+        document.getElementById('connection-status').textContent = '● Scanning...';
+        document.getElementById('connection-status').className = 'status-offline';
+        document.getElementById('latency-badge').classList.add('hidden');
+        document.getElementById('e2ee-fingerprint').classList.add('hidden');
+        toggleInputs(false);
+      }
+      if (isAdmin) renderContacts();
+      setTimeout(attemptConnectAll, 1000);
     }
-    if (isAdmin) renderContacts();
-    setTimeout(attemptConnectAll, 800);
   });
 }
 
@@ -246,7 +293,7 @@ function startLatencyTracker(peerId) {
   latencyInterval = setInterval(() => {
     const c = activeConns[peerId];
     if (c && c.open && peerId === currentPeerId) c.send({ type: 'ping', t: Date.now() });
-  }, 3000);
+  }, 4000);
 }
 
 function updateOnlineUI(name) {
@@ -273,7 +320,6 @@ function generateE2EEFingerprint(id1, id2) {
 function handleIncomingData(data, conn) {
   const sp = conn.peer;
 
-  // Auto focus active peer if idle
   if (!currentPeerId) {
     currentPeerId = sp;
     updateOnlineUI(getContactName(sp) || sp);
@@ -425,7 +471,7 @@ document.getElementById('btn-toggle-emoji').onclick = (e) => {
 };
 
 document.body.addEventListener('click', (e) => {
-  if (!emojiPanel.contains(e.target) && e.target.id !== 'btn-toggle-emoji') {
+  if (emojiPanel && !emojiPanel.contains(e.target) && e.target.id !== 'btn-toggle-emoji') {
     emojiPanel.classList.add('hidden');
   }
 });
@@ -903,7 +949,7 @@ function closeCallModal() {
   document.getElementById('btn-toggle-pip').textContent = "⛶ Fullscreen";
 }
 
-// === PIP / FLOAT / FULLSCREEN (3-state cycle) ===
+// === PIP / FLOAT / FULLSCREEN ===
 document.getElementById('btn-toggle-pip').onclick = async () => {
   const modal = document.querySelector('.studio-modal');
   const btn = document.getElementById('btn-toggle-pip');
