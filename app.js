@@ -1,5 +1,5 @@
 // ============================================================
-// GHOSTNODE v8.5 — Ultra Stable P2P (Screen Share & Video Core Fix)
+// GHOSTNODE v9.0 — Clean & Rock-Solid P2P Engine
 // ============================================================
 const ADMIN_PIN = "2007";
 let isAdmin = sessionStorage.getItem('ghost_is_admin') === 'true';
@@ -33,7 +33,7 @@ let _pendingCall = null;
 let latencyInterval = null;
 let pipState = 0;
 
-// === PWA INSTALL PROMPT SUPPORT ===
+// === PWA INSTALL PROMPT ===
 let deferredPrompt = null;
 const installBtn = document.getElementById('btn-install-app');
 
@@ -46,12 +46,12 @@ window.addEventListener('beforeinstallprompt', (e) => {
 if (installBtn) {
   installBtn.addEventListener('click', async () => {
     if (!deferredPrompt) {
-      alert("To install this app, tap your browser menu (⋮) and select 'Add to Home screen' or 'Install App'.");
+      alert("App can be installed from browser menu (⋮) -> 'Add to Home screen' or 'Install'.");
       return;
     }
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    console.log(`PWA install: ${outcome}`);
+    console.log(`PWA install outcome: ${outcome}`);
     deferredPrompt = null;
     installBtn.classList.add('hidden');
   });
@@ -61,7 +61,7 @@ window.addEventListener('appinstalled', () => {
   if (installBtn) installBtn.classList.add('hidden');
 });
 
-// === CONN HELPERS ===
+// === CONNECTION HELPERS ===
 function getActiveConn() { return currentPeerId ? activeConns[currentPeerId] : null; }
 
 function queueOrSend(payload) {
@@ -107,7 +107,7 @@ function switchToPeer(peerId, name) {
   if (isAdmin) renderContacts();
 }
 
-// === PEER INITIALIZATION ===
+// === FAST & ULTRA-RELIABLE STUN SERVERS (NO AUTH REQUIRED) ===
 const peer = new Peer(myId, {
   config: {
     iceServers: [
@@ -116,11 +116,7 @@ const peer = new Peer(myId, {
       { urls: 'stun:stun2.l.google.com:19302' },
       { urls: 'stun:stun3.l.google.com:19302' },
       { urls: 'stun:stun4.l.google.com:19302' },
-      { urls: 'stun:global.stun.twilio.com:3478' },
-      { urls: 'stun:openrelay.metered.ca:80' },
-      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+      { urls: 'stun:stun.cloudflare.com:3478' }
     ],
     iceCandidatePoolSize: 10
   },
@@ -128,10 +124,10 @@ const peer = new Peer(myId, {
 });
 
 peer.on('open', (id) => {
-  console.log('✅ GhostNode Online:', id);
+  console.log('✅ Peer Ready:', id);
   document.getElementById('my-peer-id').textContent = id;
   attemptConnectAll();
-  setInterval(attemptConnectAll, 4000);
+  setInterval(attemptConnectAll, 3000);
 });
 
 peer.on('connection', (conn) => setupConnection(conn));
@@ -147,7 +143,7 @@ peer.on('error', (err) => {
     if (match) {
       const peerId = match[1];
       delete connectingTo[peerId];
-      peerBackoff[peerId] = Date.now() + 4000;
+      peerBackoff[peerId] = Date.now() + 3000;
     }
     return;
   }
@@ -173,7 +169,7 @@ function attemptConnectAll() {
       (id === 'admin_pc' || id === 'admin_laptop') && activeConns[id].open
     );
     if (connectedToAdmin) return;
-    
+
     ['admin_pc', 'admin_laptop'].forEach(id => {
       if (!activeConns[id] || !activeConns[id].open) {
         silentConnect(id, id === 'admin_pc' ? 'Admin PC' : 'Admin Laptop');
@@ -198,11 +194,8 @@ function silentConnect(targetId, name = null) {
   }
 
   const connectTimeout = setTimeout(() => {
-    if (connectingTo[targetId]) {
-      delete connectingTo[targetId];
-      try { conn.close(); } catch(e) {}
-    }
-  }, 12000);
+    delete connectingTo[targetId];
+  }, 8000);
 
   conn.on('open', () => {
     clearTimeout(connectTimeout);
@@ -220,14 +213,9 @@ function silentConnect(targetId, name = null) {
 
 function setupConnection(conn, name = null) {
   conn.on('open', () => {
-    if (activeConns[conn.peer] && activeConns[conn.peer].open && activeConns[conn.peer] !== conn) {
-      try { conn.close(); } catch(e) {}
-      return;
-    }
-
     activeConns[conn.peer] = conn;
 
-    // Auto-discovery in Admin contact list
+    // Auto-discover contacts on Admin
     if (isAdmin && !contacts.some(c => c.id === conn.peer)) {
       contacts.push({ name: name || `Node (${conn.peer.slice(-4)})`, id: conn.peer });
       localStorage.setItem('ghost_admin_contacts', JSON.stringify(contacts));
@@ -255,19 +243,17 @@ function setupConnection(conn, name = null) {
   conn.on('data', (data) => handleIncomingData(data, conn));
 
   conn.on('close', () => {
-    if (activeConns[conn.peer] === conn) {
-      delete activeConns[conn.peer];
-      delete peerBackoff[conn.peer];
-      if (currentPeerId === conn.peer) {
-        document.getElementById('connection-status').textContent = '● Scanning...';
-        document.getElementById('connection-status').className = 'status-offline';
-        document.getElementById('latency-badge').classList.add('hidden');
-        document.getElementById('e2ee-fingerprint').classList.add('hidden');
-        toggleInputs(false);
-      }
-      if (isAdmin) renderContacts();
-      setTimeout(attemptConnectAll, 1000);
+    delete activeConns[conn.peer];
+    delete peerBackoff[conn.peer];
+    if (currentPeerId === conn.peer) {
+      document.getElementById('connection-status').textContent = '● Scanning...';
+      document.getElementById('connection-status').className = 'status-offline';
+      document.getElementById('latency-badge').classList.add('hidden');
+      document.getElementById('e2ee-fingerprint').classList.add('hidden');
+      toggleInputs(false);
     }
+    if (isAdmin) renderContacts();
+    setTimeout(attemptConnectAll, 1000);
   });
 }
 
@@ -277,7 +263,7 @@ function startLatencyTracker(peerId) {
   latencyInterval = setInterval(() => {
     const c = activeConns[peerId];
     if (c && c.open && peerId === currentPeerId) c.send({ type: 'ping', t: Date.now() });
-  }, 4000);
+  }, 3000);
 }
 
 function updateOnlineUI(name) {
@@ -338,8 +324,7 @@ function handleIncomingData(data, conn) {
   }
   else if (data.type === 'call_ring') {
     playRingtone();
-    const title = data.isScreen ? "Incoming Screen Share" : "Incoming Call";
-    sendDesktopNotification(title, "Click to join live session");
+    sendDesktopNotification(data.isScreen ? "Screen Sharing Session" : "Incoming Call", "Click to join");
   }
   else if (data.type === 'call_accepted') {
     document.getElementById('call-status-title').textContent = "Live Session Active";
@@ -675,11 +660,37 @@ const ringtone = document.getElementById('ringtone');
 function playRingtone() { ringtone.play().catch(() => playLoudChime()); }
 function stopRingtone() { ringtone.pause(); ringtone.currentTime = 0; }
 
-async function getMediaStream(audioOnly = false) {
+// Creates a silent audio track for WebRTC compatibility
+function createSilentAudioTrack() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const dst = ctx.createMediaStreamDestination();
+    osc.connect(dst);
+    osc.start();
+    const track = dst.stream.getAudioTracks()[0];
+    track.enabled = false;
+    return track;
+  } catch(e) { return null; }
+}
+
+// Creates dummy stream for receiver so PeerJS call.answer never fails or shows black screen
+function createDummyStream() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 320; canvas.height = 240;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#0b0e14'; ctx.fillRect(0, 0, 320, 240);
+  const stream = canvas.captureStream(2);
+  const audioTrack = createSilentAudioTrack();
+  if (audioTrack) stream.addTrack(audioTrack);
+  return stream;
+}
+
+async function getMediaStream() {
   try {
     return await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true },
-      video: audioOnly ? false : { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
     });
   } catch(e) {
     console.warn("Camera fallback to audio only:", e);
@@ -687,75 +698,27 @@ async function getMediaStream(audioOnly = false) {
   }
 }
 
-// === CRITICAL FIX: DIRECT WEBRTC TRACK BINDING (NO BLACK SCREEN) ===
+// === CALL EVENTS (BULLETPROOF STREAM RENDER) ===
 function bindCallEvents(call, peerId, name = null) {
   activeCalls[peerId] = call;
 
-  // Listen directly to underlying WebRTC ontrack (bypasses PeerJS audio-first stream drop)
-  if (call.peerConnection) {
-    call.peerConnection.ontrack = (event) => {
-      console.log('🎥 WebRTC Track Received:', event.track.kind);
-      
-      if (event.track.kind === 'video') {
-        const video = document.getElementById('remote-stream-video');
-        let stream = video.srcObject;
-        if (!stream || !(stream instanceof MediaStream)) {
-          stream = new MediaStream();
-          video.srcObject = stream;
-        }
-        
-        // Remove older video tracks and add new one
-        stream.getVideoTracks().forEach(t => stream.removeTrack(t));
-        stream.addTrack(event.track);
-
-        video.muted = true; // Avoid autoplay policy restriction
-        video.playsInline = true;
-
-        video.onloadedmetadata = () => {
-          video.play().catch(e => console.warn("Video play err:", e));
-        };
-        video.play().catch(() => {});
-
-        document.getElementById('call-modal').classList.remove('hidden');
-        document.getElementById('call-status-title').textContent = "Live Session Active";
-        document.getElementById('remote-stream-label').textContent = `${name || getContactName(peerId) || peerId} (Live)`;
-      } 
-      else if (event.track.kind === 'audio') {
-        const audio = document.getElementById('remote-audio-player');
-        let stream = audio.srcObject;
-        if (!stream || !(stream instanceof MediaStream)) {
-          stream = new MediaStream();
-          audio.srcObject = stream;
-        }
-        stream.getAudioTracks().forEach(t => stream.removeTrack(t));
-        stream.addTrack(event.track);
-        audio.play().catch(() => {
-          document.getElementById('btn-unmute-audio').classList.remove('hidden');
-        });
-      }
-      updateGroupCountPill();
-    };
-  }
-
-  // Fallback for standard PeerJS stream event
-  call.on('stream', (remote) => {
+  call.on('stream', (remoteStream) => {
+    console.log('📺 Stream Received:', remoteStream.getTracks().map(t => `${t.kind}:${t.readyState}`));
     const video = document.getElementById('remote-stream-video');
     const audio = document.getElementById('remote-audio-player');
 
-    if (remote.getVideoTracks().length > 0) {
-      video.srcObject = remote;
-      video.muted = true;
-      video.playsInline = true;
-      video.onloadedmetadata = () => video.play().catch(() => {});
-      video.play().catch(() => {});
-    }
+    video.srcObject = remoteStream;
+    video.muted = true; // Muted allows instant autoplay without browser block
+    video.playsInline = true;
 
-    if (remote.getAudioTracks().length > 0) {
-      audio.srcObject = remote;
-      audio.play().catch(() => {
-        document.getElementById('btn-unmute-audio').classList.remove('hidden');
-      });
-    }
+    audio.srcObject = remoteStream;
+    audio.playsInline = true;
+
+    video.onloadedmetadata = () => video.play().catch(() => {});
+    video.play().catch(() => {});
+    audio.play().catch(() => {
+      document.getElementById('btn-unmute-audio').classList.remove('hidden');
+    });
 
     document.getElementById('call-modal').classList.remove('hidden');
     document.getElementById('call-status-title').textContent = "Live Session Active";
@@ -805,7 +768,7 @@ function updateHardwareStatusPill() {
   }
 }
 
-// === CALLS ===
+// === CALL INITIATE ===
 document.getElementById('btn-start-call').onclick = async () => {
   if (!currentPeerId) return alert("Select a peer first");
   const conn = getActiveConn();
@@ -854,28 +817,18 @@ function handleIncomingCall(call) {
   document.getElementById('btn-accept-call').classList.remove('hidden');
 }
 
-// Fixed Accept Call: viewer can answer immediately without needing camera
+// Fixed Accept Call: viewer can accept instantly without black screen
 document.getElementById('btn-accept-call').onclick = async () => {
   stopRingtone();
   const call = _pendingCall;
   if (!call) return;
   
-  // Try audio stream if available, otherwise answer without stream (receive only)
   if (!localStream) {
-    try { localStream = await getMediaStream(true); }
-    catch(e) { localStream = null; }
+    localStream = createDummyStream();
   }
 
   try {
-    if (localStream) {
-      call.answer(localStream);
-      if (localStream.getVideoTracks().some(t => t.readyState === 'live')) {
-        document.getElementById('local-stream-video').srcObject = localStream;
-        document.getElementById('local-preview-card').classList.remove('hidden');
-      }
-    } else {
-      call.answer(); // Pure receive mode
-    }
+    call.answer(localStream);
   } catch(e) {
     return alert("Answer failed: " + e.message);
   }
@@ -898,18 +851,22 @@ async function triggerUniversalScreenShare() {
     let ds = null;
     try {
       ds = await navigator.mediaDevices.getDisplayMedia({
-        video: { cursor: 'always', frameRate: 30 },
-        audio: true
+        video: { cursor: 'always' },
+        audio: false // Avoid audio constraint errors
       });
     } catch(err) {
-      ds = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      console.warn("Screen share prompt cancelled.");
+      return;
     }
 
     screenStream = ds;
     isScreenSharing = true;
 
+    // Attach silent audio track so WebRTC media connection stays stable
+    const silentAudio = createSilentAudioTrack();
+    if (silentAudio) ds.addTrack(silentAudio);
+
     const screenTrack = ds.getVideoTracks()[0];
-    const screenAudio = ds.getAudioTracks()[0];
 
     document.getElementById('call-modal').classList.remove('hidden');
     document.getElementById('call-status-title').textContent = "Broadcasting Screen...";
@@ -924,17 +881,13 @@ async function triggerUniversalScreenShare() {
     const conn = getActiveConn();
     if (conn && conn.open) conn.send({ type: 'screen_state', isSharing: true });
 
-    // Scenario A: If call is already active, replace video tracks
+    // Scenario A: If call is already active, replace video track seamlessly
     if (Object.keys(activeCalls).length > 0) {
       Object.values(activeCalls).forEach(call => {
         if (call.peerConnection) {
           const senders = call.peerConnection.getSenders();
           const videoSender = senders.find(s => s.track && s.track.kind === 'video');
           if (videoSender) videoSender.replaceTrack(screenTrack);
-          if (screenAudio) {
-            const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
-            if (audioSender) audioSender.replaceTrack(screenAudio);
-          }
         }
       });
     } 
@@ -948,13 +901,13 @@ async function triggerUniversalScreenShare() {
 
     updateHardwareStatusPill();
 
-    // Browser's "Stop sharing" event
+    // Browser's native "Stop sharing" event
     screenTrack.onended = () => {
       stopScreenShare();
     };
 
   } catch(err) {
-    if (err.name !== 'NotAllowedError') console.error("Screen share error:", err);
+    console.error("Screen share error:", err);
   }
 }
 
@@ -989,25 +942,53 @@ document.getElementById('btn-screen-share').onclick = triggerUniversalScreenShar
 document.getElementById('btn-screen-in-call').onclick = triggerUniversalScreenShare;
 
 // === MIC/CAM TOGGLES ===
-document.getElementById('btn-toggle-mic').onclick = () => {
+document.getElementById('btn-toggle-mic').onclick = async () => {
   const btn = document.getElementById('btn-toggle-mic');
-  if (!localStream) return;
-  isMicOn = !isMicOn;
-  localStream.getAudioTracks().forEach(t => t.enabled = isMicOn);
-  btn.textContent = isMicOn ? "🎙️ Mic: ON" : "🎙️ Mic: Off";
-  btn.classList.toggle('active', isMicOn);
+  if (!isMicOn) {
+    try {
+      const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const at = ms.getAudioTracks()[0];
+      Object.values(activeCalls).forEach(c => {
+        if (c.peerConnection) {
+          const s = c.peerConnection.getSenders().find(x => x.track && x.track.kind === 'audio');
+          if (s) s.replaceTrack(at);
+        }
+      });
+      if (localStream) {
+        localStream.getAudioTracks().forEach(t => localStream.removeTrack(t));
+        localStream.addTrack(at);
+      }
+      isMicOn = true; btn.textContent = "🎙️ Mic: ON"; btn.classList.add('active');
+    } catch(e) { alert("Mic error: " + e.message); }
+  } else {
+    if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = false);
+    isMicOn = false; btn.textContent = "🎙️ Mic: Off"; btn.classList.remove('active');
+  }
   updateHardwareStatusPill();
 };
 
-document.getElementById('btn-toggle-cam').onclick = () => {
+document.getElementById('btn-toggle-cam').onclick = async () => {
   const btn = document.getElementById('btn-toggle-cam');
-  const lv = document.getElementById('local-preview-card');
-  if (!localStream) return;
-  isCamOn = !isCamOn;
-  localStream.getVideoTracks().forEach(t => t.enabled = isCamOn);
-  lv.classList.toggle('hidden', !isCamOn);
-  btn.textContent = isCamOn ? "📷 Cam: ON" : "📷 Cam: Off";
-  btn.classList.toggle('active', isCamOn);
+  const lv = document.getElementById('local-stream-video');
+  if (!isCamOn) {
+    try {
+      const cs = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+      const vt = cs.getVideoTracks()[0];
+      lv.srcObject = cs;
+      document.getElementById('local-preview-card').classList.remove('hidden');
+      Object.values(activeCalls).forEach(c => {
+        if (c.peerConnection) {
+          const s = c.peerConnection.getSenders().find(x => x.track && x.track.kind === 'video');
+          if (s) s.replaceTrack(vt);
+        }
+      });
+      isCamOn = true; btn.textContent = "📷 Cam: ON"; btn.classList.add('active');
+    } catch(e) { alert("Cam error: " + e.message); }
+  } else {
+    isCamOn = false; btn.textContent = "📷 Cam: Off"; btn.classList.remove('active');
+    document.getElementById('local-preview-card').classList.add('hidden');
+    if (lv.srcObject) { lv.srcObject.getTracks().forEach(t => t.stop()); lv.srcObject = null; }
+  }
   updateHardwareStatusPill();
 };
 
