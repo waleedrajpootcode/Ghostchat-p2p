@@ -1,5 +1,5 @@
 // ============================================================
-// GHOSTNODE v9.5 — Universal P2P Studio (Laptop, PC & Mobile)
+// GHOSTNODE v10.5 — Verified Production Engine
 // ============================================================
 const ADMIN_PIN = "2007";
 let isAdmin = sessionStorage.getItem('ghost_is_admin') === 'true';
@@ -33,7 +33,7 @@ let _pendingCall = null;
 let latencyInterval = null;
 let pipState = 0;
 
-// === PWA INSTALL PROMPT ===
+// === PWA INSTALL SUPPORT ===
 let deferredPrompt = null;
 const installBtn = document.getElementById('btn-install-app');
 
@@ -46,12 +46,10 @@ window.addEventListener('beforeinstallprompt', (e) => {
 if (installBtn) {
   installBtn.addEventListener('click', async () => {
     if (!deferredPrompt) {
-      alert("App can be installed from browser menu (⋮) -> 'Add to Home screen' or 'Install'.");
+      alert("Browser menu (⋮) par ja kar 'Add to Home screen' ya 'Install' dabayein.");
       return;
     }
     deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    console.log(`PWA install: ${outcome}`);
     deferredPrompt = null;
     installBtn.classList.add('hidden');
   });
@@ -107,7 +105,7 @@ function switchToPeer(peerId, name) {
   if (isAdmin) renderContacts();
 }
 
-// === PEER INITIALIZATION ===
+// === GLOBAL STUN SERVERS ===
 const peer = new Peer(myId, {
   config: {
     iceServers: [
@@ -116,7 +114,8 @@ const peer = new Peer(myId, {
       { urls: 'stun:stun2.l.google.com:19302' },
       { urls: 'stun:stun3.l.google.com:19302' },
       { urls: 'stun:stun4.l.google.com:19302' },
-      { urls: 'stun:stun.cloudflare.com:3478' }
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      { urls: 'stun:global.stun.twilio.com:3478' }
     ],
     iceCandidatePoolSize: 10
   },
@@ -124,7 +123,7 @@ const peer = new Peer(myId, {
 });
 
 peer.on('open', (id) => {
-  console.log('✅ Peer Ready:', id);
+  console.log('✅ Online:', id);
   document.getElementById('my-peer-id').textContent = id;
   attemptConnectAll();
   setInterval(attemptConnectAll, 3000);
@@ -141,9 +140,7 @@ peer.on('error', (err) => {
   if (err.type === 'peer-unavailable') {
     const match = err.message.match(/peer (\S+)/);
     if (match) {
-      const peerId = match[1];
-      delete connectingTo[peerId];
-      peerBackoff[peerId] = Date.now() + 3000;
+      delete connectingTo[match[1]];
     }
     return;
   }
@@ -152,30 +149,22 @@ peer.on('error', (err) => {
     setTimeout(() => location.reload(), 800);
     return;
   }
-  console.warn('Peer error:', err.type, err.message);
+  console.warn('Peer error:', err.type);
 });
 
-// === AUTO MESH CONNECT (LAPTOP ↔ PC ↔ MOBILE) ===
+// === AUTO-CONNECT ===
 const connectingTo = {};
-const peerBackoff = {};
 
 function attemptConnectAll() {
   if (isAdmin) {
     contacts.forEach(c => {
       if (!activeConns[c.id] || !activeConns[c.id].open) silentConnect(c.id, c.name);
     });
-
-    // Laptop & PC mutual discovery: Laptop scans for PC, PC scans for Laptop
-    const otherAdmin = adminDevice === 'PC' ? 'admin_laptop' : 'admin_pc';
-    if (!activeConns[otherAdmin] || !activeConns[otherAdmin].open) {
-      silentConnect(otherAdmin, adminDevice === 'PC' ? 'Admin Laptop' : 'Admin PC');
-    }
   } else {
-    // Mobile / Guest scans for both PC and Laptop
-    const connectedToAdmin = Object.keys(activeConns).some(id =>
+    const connected = Object.keys(activeConns).some(id =>
       (id === 'admin_pc' || id === 'admin_laptop') && activeConns[id].open
     );
-    if (connectedToAdmin) return;
+    if (connected) return;
 
     ['admin_pc', 'admin_laptop'].forEach(id => {
       if (!activeConns[id] || !activeConns[id].open) {
@@ -189,7 +178,6 @@ function silentConnect(targetId, name = null) {
   if (!targetId || targetId === myId) return;
   if (activeConns[targetId] && activeConns[targetId].open) return;
   if (connectingTo[targetId]) return;
-  if (peerBackoff[targetId] && peerBackoff[targetId] > Date.now()) return;
 
   connectingTo[targetId] = true;
   let conn;
@@ -200,18 +188,17 @@ function silentConnect(targetId, name = null) {
     return;
   }
 
-  const connectTimeout = setTimeout(() => {
+  const timer = setTimeout(() => {
     delete connectingTo[targetId];
-  }, 8000);
+  }, 6000);
 
   conn.on('open', () => {
-    clearTimeout(connectTimeout);
+    clearTimeout(timer);
     delete connectingTo[targetId];
-    delete peerBackoff[targetId];
   });
 
   conn.on('error', () => {
-    clearTimeout(connectTimeout);
+    clearTimeout(timer);
     delete connectingTo[targetId];
   });
 
@@ -222,7 +209,6 @@ function setupConnection(conn, name = null) {
   conn.on('open', () => {
     activeConns[conn.peer] = conn;
 
-    // Auto-discover contacts on Admin
     if (isAdmin && !contacts.some(c => c.id === conn.peer)) {
       contacts.push({ name: name || `Node (${conn.peer.slice(-4)})`, id: conn.peer });
       localStorage.setItem('ghost_admin_contacts', JSON.stringify(contacts));
@@ -251,7 +237,6 @@ function setupConnection(conn, name = null) {
 
   conn.on('close', () => {
     delete activeConns[conn.peer];
-    delete peerBackoff[conn.peer];
     if (currentPeerId === conn.peer) {
       document.getElementById('connection-status').textContent = '● Scanning...';
       document.getElementById('connection-status').className = 'status-offline';
@@ -260,7 +245,6 @@ function setupConnection(conn, name = null) {
       toggleInputs(false);
     }
     if (isAdmin) renderContacts();
-    setTimeout(attemptConnectAll, 1000);
   });
 }
 
@@ -331,8 +315,7 @@ function handleIncomingData(data, conn) {
   }
   else if (data.type === 'call_ring') {
     playRingtone();
-    const title = data.isScreen ? "Screen Sharing Session" : "Incoming Call";
-    sendDesktopNotification(title, "Click to join");
+    sendDesktopNotification(data.isScreen ? "Screen Sharing Session" : "Incoming Call", "Click to view");
   }
   else if (data.type === 'call_accepted') {
     document.getElementById('call-status-title').textContent = "Live Session Active";
@@ -341,7 +324,6 @@ function handleIncomingData(data, conn) {
   else if (data.type === 'call_ended') {
     closeCallModal();
   }
-  // Two-way Screen Share State Notification
   else if (data.type === 'screen_state') {
     const title = document.getElementById('call-status-title');
     const grid = document.getElementById('video-grid');
@@ -350,9 +332,7 @@ function handleIncomingData(data, conn) {
     if (data.isSharing) {
       title.textContent = `🖥️ ${getContactName(sp) || sp} is Sharing Screen`;
       if (grid) grid.classList.add('maximized-remote');
-      if (remoteVid) {
-        remoteVid.play().catch(() => {});
-      }
+      if (remoteVid) remoteVid.play().catch(() => {});
     } else {
       title.textContent = "Live Session Active";
       if (grid) grid.classList.remove('maximized-remote');
@@ -367,7 +347,6 @@ function handleIncomingData(data, conn) {
   }
 }
 
-// === FORMAT MESSAGE ===
 function formatMessageContent(text) {
   if (text.startsWith('```') && text.endsWith('```')) {
     const pre = document.createElement('pre');
@@ -380,7 +359,6 @@ function formatMessageContent(text) {
   return span;
 }
 
-// === NOTIFICATIONS ===
 function playLoudChime() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -408,7 +386,6 @@ function sendDesktopNotification(title, body) {
     new Notification(title, { body, icon: 'ghost-icon-v2.png' });
   }
 }
-
 if ("Notification" in window && Notification.permission !== "granted") Notification.requestPermission();
 
 // === ALL 10 EMOJI CATEGORIES ===
@@ -481,7 +458,7 @@ document.body.addEventListener('click', (e) => {
   }
 });
 
-// === CHAT ===
+// === CHAT & INPUTS ===
 const msgInput = document.getElementById('message-input');
 let typingTimeout = null;
 msgInput.addEventListener('input', () => {
@@ -512,35 +489,11 @@ document.getElementById('file-input').onchange = (e) => {
   const f = e.target.files[0];
   if (!f) return;
   if (f.size > 8 * 1024 * 1024 && !confirm(`File ${(f.size/1024/1024).toFixed(1)}MB. Continue?`)) { e.target.value = ''; return; }
-  if (f.type.startsWith('image/')) {
-    compressImage(f, (u) => sendFilePayload(u, 'image/jpeg', f.name.replace(/\.[^.]+$/, '.jpg')));
-  } else {
-    const r = new FileReader();
-    r.onload = () => sendFilePayload(r.result, f.type, f.name);
-    r.readAsDataURL(f);
-  }
+  const r = new FileReader();
+  r.onload = () => sendFilePayload(r.result, f.type, f.name);
+  r.readAsDataURL(f);
   e.target.value = '';
 };
-
-function compressImage(file, cb) {
-  const img = new Image();
-  const url = URL.createObjectURL(file);
-  img.onload = () => {
-    const c = document.createElement('canvas');
-    let { width, height } = img;
-    const max = 1280;
-    if (width > max || height > max) {
-      if (width > height) { height = Math.round(height * max / width); width = max; }
-      else { width = Math.round(width * max / height); height = max; }
-    }
-    c.width = width; c.height = height;
-    c.getContext('2d').drawImage(img, 0, 0, width, height);
-    URL.revokeObjectURL(url);
-    cb(c.toDataURL('image/jpeg', 0.8));
-  };
-  img.onerror = () => { const r = new FileReader(); r.onload = () => cb(r.result); r.readAsDataURL(file); };
-  img.src = url;
-}
 
 function sendFilePayload(data, type, name) {
   const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
@@ -569,7 +522,7 @@ voiceBtn.onclick = async () => {
       isRecordingVoice = true;
       voiceBtn.classList.add('recording');
       voiceBtn.title = "Click to Stop & Send";
-    } catch(e) { alert("⚠️ Microphone: " + e.message); }
+    } catch(e) { alert("⚠️ Mic: " + e.message); }
   } else {
     mediaRecorder.stop();
     isRecordingVoice = false;
@@ -615,7 +568,6 @@ function appendStudioMessage(s, t) {
   f.appendChild(i); f.scrollTop = f.scrollHeight;
 }
 
-// === DELETE CHOICE MODAL ===
 function showDeleteChoiceModal(msgId, msgDiv) {
   const choiceModal = document.createElement('div');
   choiceModal.className = 'modal';
@@ -705,7 +657,6 @@ async function getMediaStream() {
       video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
     });
   } catch(e) {
-    console.warn("Camera fallback to audio only:", e);
     return await navigator.mediaDevices.getUserMedia({ audio: true });
   }
 }
@@ -713,9 +664,9 @@ async function getMediaStream() {
 // === CALL EVENTS (TWO-WAY SCREEN RENDERING) ===
 function bindCallEvents(call, peerId, name = null) {
   activeCalls[peerId] = call;
+  if (!currentPeerId) currentPeerId = peerId;
 
   call.on('stream', (remoteStream) => {
-    console.log('📺 Stream Received:', remoteStream.getTracks().map(t => `${t.kind}:${t.readyState}`));
     const video = document.getElementById('remote-stream-video');
     const audio = document.getElementById('remote-audio-player');
 
@@ -814,6 +765,7 @@ document.getElementById('btn-start-call').onclick = async () => {
 
 function handleIncomingCall(call) {
   activeCalls[call.peer] = call;
+  if (!currentPeerId) currentPeerId = call.peer;
   bindCallEvents(call, call.peer);
 
   const modalOpen = !document.getElementById('call-modal').classList.contains('hidden');
@@ -853,16 +805,15 @@ document.getElementById('btn-accept-call').onclick = async () => {
   if (conn && conn.open) conn.send({ type: 'call_accepted', isGroup: isGroupCallActive });
 };
 
-// === TWO-WAY SCREEN SHARING (LAPTOP, PC & ANDROID MOBILE) ===
+// === TWO-WAY SCREEN SHARING ===
 async function triggerUniversalScreenShare() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-    return alert("Screen sharing is supported on Laptop, PC, and Android Chrome. iPhone Safari does not support sharing screens (viewing is supported).");
+    return alert("Screen sharing is supported on Laptop, PC, and Android Chrome. iPhone Safari supports viewing only.");
   }
-  if (!currentPeerId) return alert("Please select or connect to a peer first.");
+  if (!currentPeerId) return alert("Select or connect to a peer first.");
 
   try {
     let ds = null;
-    // Mobile-friendly displayMedia (No cursor constraints that crash Android)
     try {
       ds = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
     } catch(err) {
@@ -883,7 +834,6 @@ async function triggerUniversalScreenShare() {
     document.getElementById('call-modal').classList.remove('hidden');
     document.getElementById('call-status-title').textContent = "Broadcasting Screen...";
     
-    // Show local preview of our own screen
     const localVid = document.getElementById('local-stream-video');
     localVid.srcObject = ds;
     localVid.muted = true;
@@ -893,7 +843,6 @@ async function triggerUniversalScreenShare() {
     const conn = getActiveConn();
     if (conn && conn.open) conn.send({ type: 'screen_state', isSharing: true });
 
-    // Scenario A: Call already active -> Replace video track bidirectionally
     if (Object.keys(activeCalls).length > 0) {
       Object.values(activeCalls).forEach(call => {
         if (call.peerConnection) {
@@ -904,9 +853,7 @@ async function triggerUniversalScreenShare() {
           }
         }
       });
-    } 
-    // Scenario B: No call active -> Start screen call
-    else {
+    } else {
       localStream = ds;
       if (conn && conn.open) conn.send({ type: 'call_ring', isScreen: true });
       const sc = peer.call(currentPeerId, ds);
@@ -915,7 +862,6 @@ async function triggerUniversalScreenShare() {
 
     updateHardwareStatusPill();
 
-    // Native browser "Stop Sharing" button
     screenTrack.onended = () => {
       stopScreenShare();
     };
@@ -1242,8 +1188,21 @@ function updateAdminUI() {
 updateAdminUI();
 
 adminBtn.onclick = () => {
-  if (isAdmin) { if (confirm("Lock?")) { isAdmin = false; sessionStorage.removeItem('ghost_is_admin'); location.reload(); } }
-  else { const p = prompt("PIN:"); if (p === ADMIN_PIN) { isAdmin = true; sessionStorage.setItem('ghost_is_admin', 'true'); location.reload(); } else alert("Unauthorized"); }
+  if (isAdmin) { 
+    if (confirm("Lock?")) { 
+      isAdmin = false; 
+      sessionStorage.removeItem('ghost_is_admin'); 
+      localStorage.removeItem('ghost_my_id');
+      location.reload(); 
+    } 
+  } else { 
+    const p = prompt("PIN:"); 
+    if (p === ADMIN_PIN) { 
+      isAdmin = true; 
+      sessionStorage.setItem('ghost_is_admin', 'true'); 
+      location.reload(); 
+    } else alert("Unauthorized"); 
+  }
 };
 
 const ds = document.getElementById('select-device-type');
@@ -1264,19 +1223,7 @@ document.getElementById('my-live-input').oninput = (e) => {
   document.getElementById('hud-latest-text').textContent = `Me: ${e.target.value}`;
 };
 
-// Focus restore
 window.addEventListener('focus', () => {
-  if (isAdmin) {
-    contacts.forEach(c => {
-      delete peerBackoff[c.id];
-      delete peerBackoff[c.id + '_n'];
-    });
-  } else {
-    ['admin_pc', 'admin_laptop'].forEach(id => {
-      delete peerBackoff[id];
-      delete peerBackoff[id + '_n'];
-    });
-  }
   attemptConnectAll();
 });
 

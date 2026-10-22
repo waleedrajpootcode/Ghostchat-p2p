@@ -1343,3 +1343,10 @@ body {
     object-fit: contain !important;
   }
 }
+/* Mobile Display Fix: Ensures shared desktop screen fits without cropping */
+.video-card video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  background: #000;
+}
