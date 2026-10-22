@@ -1,5 +1,5 @@
-// ============================================================
-// GHOSTNODE v10.5 — Verified Production Engine
+﻿// ============================================================
+// GHOSTNODE v10.5 â€” Verified Production Engine
 // ============================================================
 const ADMIN_PIN = "2007";
 let isAdmin = sessionStorage.getItem('ghost_is_admin') === 'true';
@@ -46,7 +46,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
 if (installBtn) {
   installBtn.addEventListener('click', async () => {
     if (!deferredPrompt) {
-      alert("Browser menu (⋮) par ja kar 'Add to Home screen' ya 'Install' dabayein.");
+      alert("Browser menu (â‹®) par ja kar 'Add to Home screen' ya 'Install' dabayein.");
       return;
     }
     deferredPrompt.prompt();
@@ -96,7 +96,7 @@ function switchToPeer(peerId, name) {
     generateE2EEFingerprint(myId, peerId);
     startLatencyTracker(peerId);
   } else {
-    document.getElementById('connection-status').textContent = '● Connecting...';
+    document.getElementById('connection-status').textContent = 'â— Connecting...';
     document.getElementById('connection-status').className = 'status-offline';
     document.getElementById('current-contact-name').textContent = name || peerId;
     loadContactMessages(peerId);
@@ -123,7 +123,7 @@ const peer = new Peer(myId, {
 });
 
 peer.on('open', (id) => {
-  console.log('✅ Online:', id);
+  console.log('âœ… Online:', id);
   document.getElementById('my-peer-id').textContent = id;
   attemptConnectAll();
   setInterval(attemptConnectAll, 3000);
@@ -238,7 +238,7 @@ function setupConnection(conn, name = null) {
   conn.on('close', () => {
     delete activeConns[conn.peer];
     if (currentPeerId === conn.peer) {
-      document.getElementById('connection-status').textContent = '● Scanning...';
+      document.getElementById('connection-status').textContent = 'â— Scanning...';
       document.getElementById('connection-status').className = 'status-offline';
       document.getElementById('latency-badge').classList.add('hidden');
       document.getElementById('e2ee-fingerprint').classList.add('hidden');
@@ -258,7 +258,7 @@ function startLatencyTracker(peerId) {
 }
 
 function updateOnlineUI(name) {
-  document.getElementById('connection-status').textContent = `● Online: ${name}`;
+  document.getElementById('connection-status').textContent = `â— Online: ${name}`;
   document.getElementById('connection-status').className = 'status-online';
   document.getElementById('current-contact-name').textContent = name;
   const gs = document.getElementById('guest-status-text');
@@ -273,7 +273,7 @@ function generateE2EEFingerprint(id1, id2) {
   for (let i = 0; i < combined.length; i++) { h = ((h << 5) - h) + combined.charCodeAt(i); h |= 0; }
   const hex = Math.abs(h).toString(16).toUpperCase().padStart(8, '0');
   const b = document.getElementById('e2ee-fingerprint');
-  b.textContent = `🔒 E2EE: #${hex.slice(0,4)}-${hex.slice(4,8)}`;
+  b.textContent = `ðŸ”’ E2EE: #${hex.slice(0,4)}-${hex.slice(4,8)}`;
   b.classList.remove('hidden');
 }
 
@@ -290,7 +290,7 @@ function handleIncomingData(data, conn) {
 
   if (data.type === 'ping') { if (conn.open) conn.send({ type: 'pong', t: data.t }); }
   else if (data.type === 'pong') {
-    if (sp === currentPeerId) document.getElementById('latency-badge').textContent = `⚡ ${Math.round((Date.now()-data.t)/2)} ms P2P`;
+    if (sp === currentPeerId) document.getElementById('latency-badge').textContent = `âš¡ ${Math.round((Date.now()-data.t)/2)} ms P2P`;
   }
   else if (data.type === 'handshake') { if (sp === currentPeerId) updateOnlineUI(data.deviceLabel); }
   else if (data.type === 'typing_status') { if (sp === currentPeerId) document.getElementById('typing-indicator').classList.toggle('hidden', !data.isTyping); }
@@ -341,7 +341,7 @@ function handleIncomingData(data, conn) {
     const remoteVid = document.getElementById('remote-stream-video');
 
     if (data.isSharing) {
-      title.textContent = `🖥️ ${getContactName(sp) || sp} is Sharing Screen`;
+      title.textContent = `ðŸ–¥ï¸ ${getContactName(sp) || sp} is Sharing Screen`;
       if (grid) grid.classList.add('maximized-remote');
       if (remoteVid) remoteVid.play().catch(() => {});
     } else {
@@ -401,16 +401,16 @@ if ("Notification" in window && Notification.permission !== "granted") Notificat
 
 // === ALL 10 EMOJI CATEGORIES ===
 const EMOJI_DATA = {
-  smileys: ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','☺️','😚','😙','🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','🥴','😵','🤯','🤠','🥳','🥸','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻','👽','👾','🤖'],
-  gestures: ['👋','🤚','🖐️','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏','✍️','💅','🤳','💪','🦾','🦵','🦿','🦶','👂','🦻','👃','👀','👁️','👅','👄','💋','🧠','🫀','🫁','🦷','🦴','👤','👥','🫂','🧑','👶','🧒','👦','👧','🧓','👴','👵','🙍','🙎','🙅','🙆','💁','🙋','🧏','🙇','🤦','🤷'],
-  hearts: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','❤️‍🔥','❤️‍🩹','🔥','✨','⭐','🌟','💫','⚡','💥','💢','💦','💨','💣','💬','🗯️','💭','💤'],
-  animals: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐻‍❄️','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🙈','🙉','🙊','🐒','🐔','🐧','🐦','🐤','🐣','🐥','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦟','🦗','🕷️','🕸️','🦂','🐢','🐍','🦎','🦖','🦕','🐙','🦑','🦐','🦞','🦀','🐡','🐠','🐟','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🐘','🦛','🦏','🐪','🐫','🦒','🦘','🐃','🐂','🐄','🐎','🐖','🐏','🐑','🦙','🐐','🦌','🐕','🐩','🐈','🐓','🦃','🦚','🦜','🦢','🦩','🕊️','🐇','🦝','🦨','🦡','🦫','🦦','🦥','🐁','🐀','🐿️','🦔'],
-  food: ['🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🫑','🌽','🥕','🧄','🧅','🥔','🍠','🥐','🥯','🍞','🥖','🥨','🧀','🥚','🍳','🧈','🥞','🧇','🥓','🥩','🍗','🍖','🌭','🍔','🍟','🍕','🥪','🥙','🌮','🌯','🥗','🍝','🍜','🍲','🍛','🍣','🍱','🥟','🍤','🍙','🍚','🍘','🍢','🍡','🍧','🍨','🍦','🥧','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍿','🍩','🍪','🌰','🥜','🍯','🥛','🍼','☕','🍵','🧃','🥤','🧋','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🍾'],
-  nature: ['🌸','💮','🏵️','🌹','🥀','🌺','🌻','🌼','🌷','🌱','🪴','🌲','🌳','🌴','🌵','🌾','🌿','☘️','🍀','🍁','🍂','🍃','🍄','🌍','🌎','🌏','🌕','🌖','🌗','🌘','🌑','🌒','🌓','🌔','🌙','🌚','🌛','🌜','☀️','🌝','🌞','🪐','⭐','🌟','🌠','☁️','⛅','⛈️','🌤️','🌥️','🌦️','🌧️','🌨️','🌩️','🌪️','🌫️','🌈','☔','💧','🌊','❄️','☃️','⛄'],
-  travel: ['🚗','🚕','🚙','🚌','🏎️','🚓','🚑','🚒','🚐','🛻','🚚','🚛','🚜','🛴','🚲','🛵','🏍️','🛺','🚨','🚔','🚡','🚠','🚟','🚃','🚋','🚞','🚝','🚄','🚅','🚈','🚂','🚆','🚇','🚊','🚉','✈️','🛫','🛬','🛩️','💺','🛰️','🚀','🛸','🚁','🛶','⛵','🚤','🛥️','🛳️','⛴️','🚢','⚓','⛽','🚧','🚦','🚥','🚏','🗺️','🗿','🗽','🗼','🏰','🏯','🏟️','🎡','🎢','🎠','⛲','⛱️','🏖️','🏝️','🏜️','🌋','⛰️','🏔️','🗻','🏕️','⛺','🏠','🏡','🏘️','🏚️','🏗️','🏭','🏢','🏬','🏥','🏦','🏨','🏪','🏫','💒','🏛️','⛪','🕌','🕍','🕋','⛩️'],
-  objects: ['⌚','📱','📲','💻','⌨️','🖥️','🖨️','🖱️','🖲️','🕹️','💽','💾','💿','📀','📼','📷','📸','📹','🎥','📽️','🎞️','📞','☎️','📟','📠','📺','📻','🎙️','🎚️','🎛️','🧭','⏱️','⏲️','⏰','🕰️','⌛','⏳','📡','🔋','🔌','💡','🔦','🕯️','🧯','💸','💵','💴','💶','💷','💰','💳','💎','⚖️','🔧','🔨','⛏️','🔩','⚙️','🧲','🔫','💣','🧨','🔪','🗡️','⚔️','🛡️','🚬','⚰️','🏺','🔮','📿','🧿','💈','⚗️','🔭','🔬','🩹','🩺','💊','💉','🩸','🧬','🦠','🧪','🧹','🧺','🧻','🚽','🚿','🛁','🧼','🪥','🪒','🧽','🪣','🧴','🔑','🗝️','🚪','🪑','🛋️','🛏️','🧸','🖼️','🛍️','🛒','🎁','🎈','🎀','🎊','🎉','🏮','🧧','✉️','📩','📨','📧','💌','📥','📤','📦','🏷️','📪','📫','📬','📭','📮','📜','📃','📄','📑','🧾','📊','📈','📉','📆','📅','🗑️','📇','📋','📁','📂','📰','📓','📔','📒','📕','📗','📘','📙','📚','📖','🔖','📎','📐','📏','📌','📍','✂️','🖊️','🖋️','✒️','🖌️','🖍️','📝','✏️','🔍','🔎','🔏','🔐','🔒','🔓'],
-  symbols: ['❤️','☮️','✝️','☪️','🕉️','☸️','✡️','🔯','🕎','☯️','☦️','🛐','⛎','♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓','🆔','⚛️','🉑','☢️','☣️','📴','📳','🈶','🈚','🈸','🈺','🈷️','✴️','🆚','💮','🉐','㊙️','㊗️','🈴','🈵','🈹','🈲','🅰️','🅱️','🆎','🆑','🅾️','🆘','❌','⭕','🛑','⛔','📛','🚫','💯','💢','♨️','🚷','🚯','🚳','🚱','🔞','📵','🚭','❗','❕','❓','❔','‼️','⁉️','🔅','🔆','〽️','⚠️','🚸','🔱','⚜️','🔰','♻️','✅','🈯','💹','❇️','✳️','❎','🌐','💠','Ⓜ️','🌀','💤','🏧','🚾','♿','🅿️','🛗','🈳','🈂️','🛂','🛃','🛄','🛅','🚹','🚺','🚼','🚻','🚮','🎦','📶','🈁','🔣','ℹ️','🔤','🔡','🔠','🆖','🆗','🆙','🆒','🆕','🆓','0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟','🔢','#️⃣','*️⃣','⏏️','▶️','⏸️','⏯️','⏹️','⏺️','⏭️','⏮️','⏩','⏪','⏫','⏬','◀️','🔼','🔽','➡️','⬅️','⬆️','⬇️','↗️','↘️','↙️','↖️','↕️','↔️','↩️','↪️','⤴️','⤵️','🔀','🔁','🔂','🔄','🔃','🎵','🎶','➕','➖','➗','✖️','💲','💱','™️','©️','®️','🔚','🔙','🔛','🔝','🔜','〰️','➰','➿','✔️','☑️','🔘','🔴','🟠','🟡','🟢','🔵','🟣','⚫','⚪','🟤','🔺','🔻','🔸','🔹','🔶','🔷','🔳','🔲','▪️','▫️','◾','◽','◼️','◻️','🟥','🟧','🟨','🟩','🟦','🟪','⬛','⬜','🟫','🔈','🔇','🔉','🔊','🔔','🔕','📣','📢','♠️','♣️','♥️','♦️','🃏','🎴','🀄','🕐','🕑','🕒','🕓','🕔','🕕','🕖','🕗','🕘','🕙','🕚','🕛'],
-  tech: ['💻','🖥️','📱','⌨️','🖱️','🖨️','📷','🎥','📽️','🎙️','🎧','📡','🚀','🛸','⚡','🔋','💡','🕹️','🎮','🤖','🔒','🔑','📦','☕','💾','💿','📀','📼','🖲️','📟','📠','☎️','📞','🔌','🔦','🕯️','⏰','⏱️','⌚','📺','📻','🎚️','🎛️','🧭','📶','📳','📴','🔇','🔈','🔉','🔊','📢','📣','🔔','🔕','🛰️','🧬','🔬','🔭','🧪','🧫','⚗️','🔮']
+  smileys: ['ðŸ˜€','ðŸ˜ƒ','ðŸ˜„','ðŸ˜','ðŸ˜†','ðŸ˜…','ðŸ¤£','ðŸ˜‚','ðŸ™‚','ðŸ™ƒ','ðŸ˜‰','ðŸ˜Š','ðŸ˜‡','ðŸ¥°','ðŸ˜','ðŸ¤©','ðŸ˜˜','ðŸ˜—','â˜ºï¸','ðŸ˜š','ðŸ˜™','ðŸ¥²','ðŸ˜‹','ðŸ˜›','ðŸ˜œ','ðŸ¤ª','ðŸ˜','ðŸ¤‘','ðŸ¤—','ðŸ¤­','ðŸ¤«','ðŸ¤”','ðŸ¤','ðŸ¤¨','ðŸ˜','ðŸ˜‘','ðŸ˜¶','ðŸ˜','ðŸ˜’','ðŸ™„','ðŸ˜¬','ðŸ¤¥','ðŸ˜Œ','ðŸ˜”','ðŸ˜ª','ðŸ¤¤','ðŸ˜´','ðŸ˜·','ðŸ¤’','ðŸ¤•','ðŸ¤¢','ðŸ¤®','ðŸ¤§','ðŸ¥µ','ðŸ¥¶','ðŸ¥´','ðŸ˜µ','ðŸ¤¯','ðŸ¤ ','ðŸ¥³','ðŸ¥¸','ðŸ˜Ž','ðŸ¤“','ðŸ§','ðŸ˜•','ðŸ˜Ÿ','ðŸ™','â˜¹ï¸','ðŸ˜®','ðŸ˜¯','ðŸ˜²','ðŸ˜³','ðŸ¥º','ðŸ˜¦','ðŸ˜§','ðŸ˜¨','ðŸ˜°','ðŸ˜¥','ðŸ˜¢','ðŸ˜­','ðŸ˜±','ðŸ˜–','ðŸ˜£','ðŸ˜ž','ðŸ˜“','ðŸ˜©','ðŸ˜«','ðŸ¥±','ðŸ˜¤','ðŸ˜¡','ðŸ˜ ','ðŸ¤¬','ðŸ˜ˆ','ðŸ‘¿','ðŸ’€','â˜ ï¸','ðŸ’©','ðŸ¤¡','ðŸ‘¹','ðŸ‘º','ðŸ‘»','ðŸ‘½','ðŸ‘¾','ðŸ¤–'],
+  gestures: ['ðŸ‘‹','ðŸ¤š','ðŸ–ï¸','âœ‹','ðŸ––','ðŸ‘Œ','ðŸ¤Œ','ðŸ¤','âœŒï¸','ðŸ¤ž','ðŸ¤Ÿ','ðŸ¤˜','ðŸ¤™','ðŸ‘ˆ','ðŸ‘‰','ðŸ‘†','ðŸ–•','ðŸ‘‡','â˜ï¸','ðŸ‘','ðŸ‘Ž','âœŠ','ðŸ‘Š','ðŸ¤›','ðŸ¤œ','ðŸ‘','ðŸ™Œ','ðŸ‘','ðŸ¤²','ðŸ¤','ðŸ™','âœï¸','ðŸ’…','ðŸ¤³','ðŸ’ª','ðŸ¦¾','ðŸ¦µ','ðŸ¦¿','ðŸ¦¶','ðŸ‘‚','ðŸ¦»','ðŸ‘ƒ','ðŸ‘€','ðŸ‘ï¸','ðŸ‘…','ðŸ‘„','ðŸ’‹','ðŸ§ ','ðŸ«€','ðŸ«','ðŸ¦·','ðŸ¦´','ðŸ‘¤','ðŸ‘¥','ðŸ«‚','ðŸ§‘','ðŸ‘¶','ðŸ§’','ðŸ‘¦','ðŸ‘§','ðŸ§“','ðŸ‘´','ðŸ‘µ','ðŸ™','ðŸ™Ž','ðŸ™…','ðŸ™†','ðŸ’','ðŸ™‹','ðŸ§','ðŸ™‡','ðŸ¤¦','ðŸ¤·'],
+  hearts: ['â¤ï¸','ðŸ§¡','ðŸ’›','ðŸ’š','ðŸ’™','ðŸ’œ','ðŸ–¤','ðŸ¤','ðŸ¤Ž','ðŸ’”','â£ï¸','ðŸ’•','ðŸ’ž','ðŸ’“','ðŸ’—','ðŸ’–','ðŸ’˜','ðŸ’','ðŸ’Ÿ','â¤ï¸â€ðŸ”¥','â¤ï¸â€ðŸ©¹','ðŸ”¥','âœ¨','â­','ðŸŒŸ','ðŸ’«','âš¡','ðŸ’¥','ðŸ’¢','ðŸ’¦','ðŸ’¨','ðŸ’£','ðŸ’¬','ðŸ—¯ï¸','ðŸ’­','ðŸ’¤'],
+  animals: ['ðŸ¶','ðŸ±','ðŸ­','ðŸ¹','ðŸ°','ðŸ¦Š','ðŸ»','ðŸ¼','ðŸ»â€â„ï¸','ðŸ¨','ðŸ¯','ðŸ¦','ðŸ®','ðŸ·','ðŸ¸','ðŸµ','ðŸ™ˆ','ðŸ™‰','ðŸ™Š','ðŸ’','ðŸ”','ðŸ§','ðŸ¦','ðŸ¤','ðŸ£','ðŸ¥','ðŸ¦†','ðŸ¦…','ðŸ¦‰','ðŸ¦‡','ðŸº','ðŸ—','ðŸ´','ðŸ¦„','ðŸ','ðŸ›','ðŸ¦‹','ðŸŒ','ðŸž','ðŸœ','ðŸ¦Ÿ','ðŸ¦—','ðŸ•·ï¸','ðŸ•¸ï¸','ðŸ¦‚','ðŸ¢','ðŸ','ðŸ¦Ž','ðŸ¦–','ðŸ¦•','ðŸ™','ðŸ¦‘','ðŸ¦','ðŸ¦ž','ðŸ¦€','ðŸ¡','ðŸ ','ðŸŸ','ðŸ¬','ðŸ³','ðŸ‹','ðŸ¦ˆ','ðŸŠ','ðŸ…','ðŸ†','ðŸ¦“','ðŸ¦','ðŸ˜','ðŸ¦›','ðŸ¦','ðŸª','ðŸ«','ðŸ¦’','ðŸ¦˜','ðŸƒ','ðŸ‚','ðŸ„','ðŸŽ','ðŸ–','ðŸ','ðŸ‘','ðŸ¦™','ðŸ','ðŸ¦Œ','ðŸ•','ðŸ©','ðŸˆ','ðŸ“','ðŸ¦ƒ','ðŸ¦š','ðŸ¦œ','ðŸ¦¢','ðŸ¦©','ðŸ•Šï¸','ðŸ‡','ðŸ¦','ðŸ¦¨','ðŸ¦¡','ðŸ¦«','ðŸ¦¦','ðŸ¦¥','ðŸ','ðŸ€','ðŸ¿ï¸','ðŸ¦”'],
+  food: ['ðŸŽ','ðŸ','ðŸŠ','ðŸ‹','ðŸŒ','ðŸ‰','ðŸ‡','ðŸ“','ðŸ«','ðŸˆ','ðŸ’','ðŸ‘','ðŸ¥­','ðŸ','ðŸ¥¥','ðŸ¥','ðŸ…','ðŸ†','ðŸ¥‘','ðŸ¥¦','ðŸ¥¬','ðŸ¥’','ðŸŒ¶ï¸','ðŸ«‘','ðŸŒ½','ðŸ¥•','ðŸ§„','ðŸ§…','ðŸ¥”','ðŸ ','ðŸ¥','ðŸ¥¯','ðŸž','ðŸ¥–','ðŸ¥¨','ðŸ§€','ðŸ¥š','ðŸ³','ðŸ§ˆ','ðŸ¥ž','ðŸ§‡','ðŸ¥“','ðŸ¥©','ðŸ—','ðŸ–','ðŸŒ­','ðŸ”','ðŸŸ','ðŸ•','ðŸ¥ª','ðŸ¥™','ðŸŒ®','ðŸŒ¯','ðŸ¥—','ðŸ','ðŸœ','ðŸ²','ðŸ›','ðŸ£','ðŸ±','ðŸ¥Ÿ','ðŸ¤','ðŸ™','ðŸš','ðŸ˜','ðŸ¢','ðŸ¡','ðŸ§','ðŸ¨','ðŸ¦','ðŸ¥§','ðŸ§','ðŸ°','ðŸŽ‚','ðŸ®','ðŸ­','ðŸ¬','ðŸ«','ðŸ¿','ðŸ©','ðŸª','ðŸŒ°','ðŸ¥œ','ðŸ¯','ðŸ¥›','ðŸ¼','â˜•','ðŸµ','ðŸ§ƒ','ðŸ¥¤','ðŸ§‹','ðŸº','ðŸ»','ðŸ¥‚','ðŸ·','ðŸ¥ƒ','ðŸ¸','ðŸ¹','ðŸ¾'],
+  nature: ['ðŸŒ¸','ðŸ’®','ðŸµï¸','ðŸŒ¹','ðŸ¥€','ðŸŒº','ðŸŒ»','ðŸŒ¼','ðŸŒ·','ðŸŒ±','ðŸª´','ðŸŒ²','ðŸŒ³','ðŸŒ´','ðŸŒµ','ðŸŒ¾','ðŸŒ¿','â˜˜ï¸','ðŸ€','ðŸ','ðŸ‚','ðŸƒ','ðŸ„','ðŸŒ','ðŸŒŽ','ðŸŒ','ðŸŒ•','ðŸŒ–','ðŸŒ—','ðŸŒ˜','ðŸŒ‘','ðŸŒ’','ðŸŒ“','ðŸŒ”','ðŸŒ™','ðŸŒš','ðŸŒ›','ðŸŒœ','â˜€ï¸','ðŸŒ','ðŸŒž','ðŸª','â­','ðŸŒŸ','ðŸŒ ','â˜ï¸','â›…','â›ˆï¸','ðŸŒ¤ï¸','ðŸŒ¥ï¸','ðŸŒ¦ï¸','ðŸŒ§ï¸','ðŸŒ¨ï¸','ðŸŒ©ï¸','ðŸŒªï¸','ðŸŒ«ï¸','ðŸŒˆ','â˜”','ðŸ’§','ðŸŒŠ','â„ï¸','â˜ƒï¸','â›„'],
+  travel: ['ðŸš—','ðŸš•','ðŸš™','ðŸšŒ','ðŸŽï¸','ðŸš“','ðŸš‘','ðŸš’','ðŸš','ðŸ›»','ðŸšš','ðŸš›','ðŸšœ','ðŸ›´','ðŸš²','ðŸ›µ','ðŸï¸','ðŸ›º','ðŸš¨','ðŸš”','ðŸš¡','ðŸš ','ðŸšŸ','ðŸšƒ','ðŸš‹','ðŸšž','ðŸš','ðŸš„','ðŸš…','ðŸšˆ','ðŸš‚','ðŸš†','ðŸš‡','ðŸšŠ','ðŸš‰','âœˆï¸','ðŸ›«','ðŸ›¬','ðŸ›©ï¸','ðŸ’º','ðŸ›°ï¸','ðŸš€','ðŸ›¸','ðŸš','ðŸ›¶','â›µ','ðŸš¤','ðŸ›¥ï¸','ðŸ›³ï¸','â›´ï¸','ðŸš¢','âš“','â›½','ðŸš§','ðŸš¦','ðŸš¥','ðŸš','ðŸ—ºï¸','ðŸ—¿','ðŸ—½','ðŸ—¼','ðŸ°','ðŸ¯','ðŸŸï¸','ðŸŽ¡','ðŸŽ¢','ðŸŽ ','â›²','â›±ï¸','ðŸ–ï¸','ðŸï¸','ðŸœï¸','ðŸŒ‹','â›°ï¸','ðŸ”ï¸','ðŸ—»','ðŸ•ï¸','â›º','ðŸ ','ðŸ¡','ðŸ˜ï¸','ðŸšï¸','ðŸ—ï¸','ðŸ­','ðŸ¢','ðŸ¬','ðŸ¥','ðŸ¦','ðŸ¨','ðŸª','ðŸ«','ðŸ’’','ðŸ›ï¸','â›ª','ðŸ•Œ','ðŸ•','ðŸ•‹','â›©ï¸'],
+  objects: ['âŒš','ðŸ“±','ðŸ“²','ðŸ’»','âŒ¨ï¸','ðŸ–¥ï¸','ðŸ–¨ï¸','ðŸ–±ï¸','ðŸ–²ï¸','ðŸ•¹ï¸','ðŸ’½','ðŸ’¾','ðŸ’¿','ðŸ“€','ðŸ“¼','ðŸ“·','ðŸ“¸','ðŸ“¹','ðŸŽ¥','ðŸ“½ï¸','ðŸŽžï¸','ðŸ“ž','â˜Žï¸','ðŸ“Ÿ','ðŸ“ ','ðŸ“º','ðŸ“»','ðŸŽ™ï¸','ðŸŽšï¸','ðŸŽ›ï¸','ðŸ§­','â±ï¸','â²ï¸','â°','ðŸ•°ï¸','âŒ›','â³','ðŸ“¡','ðŸ”‹','ðŸ”Œ','ðŸ’¡','ðŸ”¦','ðŸ•¯ï¸','ðŸ§¯','ðŸ’¸','ðŸ’µ','ðŸ’´','ðŸ’¶','ðŸ’·','ðŸ’°','ðŸ’³','ðŸ’Ž','âš–ï¸','ðŸ”§','ðŸ”¨','â›ï¸','ðŸ”©','âš™ï¸','ðŸ§²','ðŸ”«','ðŸ’£','ðŸ§¨','ðŸ”ª','ðŸ—¡ï¸','âš”ï¸','ðŸ›¡ï¸','ðŸš¬','âš°ï¸','ðŸº','ðŸ”®','ðŸ“¿','ðŸ§¿','ðŸ’ˆ','âš—ï¸','ðŸ”­','ðŸ”¬','ðŸ©¹','ðŸ©º','ðŸ’Š','ðŸ’‰','ðŸ©¸','ðŸ§¬','ðŸ¦ ','ðŸ§ª','ðŸ§¹','ðŸ§º','ðŸ§»','ðŸš½','ðŸš¿','ðŸ›','ðŸ§¼','ðŸª¥','ðŸª’','ðŸ§½','ðŸª£','ðŸ§´','ðŸ”‘','ðŸ—ï¸','ðŸšª','ðŸª‘','ðŸ›‹ï¸','ðŸ›ï¸','ðŸ§¸','ðŸ–¼ï¸','ðŸ›ï¸','ðŸ›’','ðŸŽ','ðŸŽˆ','ðŸŽ€','ðŸŽŠ','ðŸŽ‰','ðŸ®','ðŸ§§','âœ‰ï¸','ðŸ“©','ðŸ“¨','ðŸ“§','ðŸ’Œ','ðŸ“¥','ðŸ“¤','ðŸ“¦','ðŸ·ï¸','ðŸ“ª','ðŸ“«','ðŸ“¬','ðŸ“­','ðŸ“®','ðŸ“œ','ðŸ“ƒ','ðŸ“„','ðŸ“‘','ðŸ§¾','ðŸ“Š','ðŸ“ˆ','ðŸ“‰','ðŸ“†','ðŸ“…','ðŸ—‘ï¸','ðŸ“‡','ðŸ“‹','ðŸ“','ðŸ“‚','ðŸ“°','ðŸ““','ðŸ“”','ðŸ“’','ðŸ“•','ðŸ“—','ðŸ“˜','ðŸ“™','ðŸ“š','ðŸ“–','ðŸ”–','ðŸ“Ž','ðŸ“','ðŸ“','ðŸ“Œ','ðŸ“','âœ‚ï¸','ðŸ–Šï¸','ðŸ–‹ï¸','âœ’ï¸','ðŸ–Œï¸','ðŸ–ï¸','ðŸ“','âœï¸','ðŸ”','ðŸ”Ž','ðŸ”','ðŸ”','ðŸ”’','ðŸ”“'],
+  symbols: ['â¤ï¸','â˜®ï¸','âœï¸','â˜ªï¸','ðŸ•‰ï¸','â˜¸ï¸','âœ¡ï¸','ðŸ”¯','ðŸ•Ž','â˜¯ï¸','â˜¦ï¸','ðŸ›','â›Ž','â™ˆ','â™‰','â™Š','â™‹','â™Œ','â™','â™Ž','â™','â™','â™‘','â™’','â™“','ðŸ†”','âš›ï¸','ðŸ‰‘','â˜¢ï¸','â˜£ï¸','ðŸ“´','ðŸ“³','ðŸˆ¶','ðŸˆš','ðŸˆ¸','ðŸˆº','ðŸˆ·ï¸','âœ´ï¸','ðŸ†š','ðŸ’®','ðŸ‰','ãŠ™ï¸','ãŠ—ï¸','ðŸˆ´','ðŸˆµ','ðŸˆ¹','ðŸˆ²','ðŸ…°ï¸','ðŸ…±ï¸','ðŸ†Ž','ðŸ†‘','ðŸ…¾ï¸','ðŸ†˜','âŒ','â­•','ðŸ›‘','â›”','ðŸ“›','ðŸš«','ðŸ’¯','ðŸ’¢','â™¨ï¸','ðŸš·','ðŸš¯','ðŸš³','ðŸš±','ðŸ”ž','ðŸ“µ','ðŸš­','â—','â•','â“','â”','â€¼ï¸','â‰ï¸','ðŸ”…','ðŸ”†','ã€½ï¸','âš ï¸','ðŸš¸','ðŸ”±','âšœï¸','ðŸ”°','â™»ï¸','âœ…','ðŸˆ¯','ðŸ’¹','â‡ï¸','âœ³ï¸','âŽ','ðŸŒ','ðŸ’ ','â“‚ï¸','ðŸŒ€','ðŸ’¤','ðŸ§','ðŸš¾','â™¿','ðŸ…¿ï¸','ðŸ›—','ðŸˆ³','ðŸˆ‚ï¸','ðŸ›‚','ðŸ›ƒ','ðŸ›„','ðŸ›…','ðŸš¹','ðŸšº','ðŸš¼','ðŸš»','ðŸš®','ðŸŽ¦','ðŸ“¶','ðŸˆ','ðŸ”£','â„¹ï¸','ðŸ”¤','ðŸ”¡','ðŸ” ','ðŸ†–','ðŸ†—','ðŸ†™','ðŸ†’','ðŸ†•','ðŸ†“','0ï¸âƒ£','1ï¸âƒ£','2ï¸âƒ£','3ï¸âƒ£','4ï¸âƒ£','5ï¸âƒ£','6ï¸âƒ£','7ï¸âƒ£','8ï¸âƒ£','9ï¸âƒ£','ðŸ”Ÿ','ðŸ”¢','#ï¸âƒ£','*ï¸âƒ£','âï¸','â–¶ï¸','â¸ï¸','â¯ï¸','â¹ï¸','âºï¸','â­ï¸','â®ï¸','â©','âª','â«','â¬','â—€ï¸','ðŸ”¼','ðŸ”½','âž¡ï¸','â¬…ï¸','â¬†ï¸','â¬‡ï¸','â†—ï¸','â†˜ï¸','â†™ï¸','â†–ï¸','â†•ï¸','â†”ï¸','â†©ï¸','â†ªï¸','â¤´ï¸','â¤µï¸','ðŸ”€','ðŸ”','ðŸ”‚','ðŸ”„','ðŸ”ƒ','ðŸŽµ','ðŸŽ¶','âž•','âž–','âž—','âœ–ï¸','ðŸ’²','ðŸ’±','â„¢ï¸','Â©ï¸','Â®ï¸','ðŸ”š','ðŸ”™','ðŸ”›','ðŸ”','ðŸ”œ','ã€°ï¸','âž°','âž¿','âœ”ï¸','â˜‘ï¸','ðŸ”˜','ðŸ”´','ðŸŸ ','ðŸŸ¡','ðŸŸ¢','ðŸ”µ','ðŸŸ£','âš«','âšª','ðŸŸ¤','ðŸ”º','ðŸ”»','ðŸ”¸','ðŸ”¹','ðŸ”¶','ðŸ”·','ðŸ”³','ðŸ”²','â–ªï¸','â–«ï¸','â—¾','â—½','â—¼ï¸','â—»ï¸','ðŸŸ¥','ðŸŸ§','ðŸŸ¨','ðŸŸ©','ðŸŸ¦','ðŸŸª','â¬›','â¬œ','ðŸŸ«','ðŸ”ˆ','ðŸ”‡','ðŸ”‰','ðŸ”Š','ðŸ””','ðŸ”•','ðŸ“£','ðŸ“¢','â™ ï¸','â™£ï¸','â™¥ï¸','â™¦ï¸','ðŸƒ','ðŸŽ´','ðŸ€„','ðŸ•','ðŸ•‘','ðŸ•’','ðŸ•“','ðŸ•”','ðŸ••','ðŸ•–','ðŸ•—','ðŸ•˜','ðŸ•™','ðŸ•š','ðŸ•›'],
+  tech: ['ðŸ’»','ðŸ–¥ï¸','ðŸ“±','âŒ¨ï¸','ðŸ–±ï¸','ðŸ–¨ï¸','ðŸ“·','ðŸŽ¥','ðŸ“½ï¸','ðŸŽ™ï¸','ðŸŽ§','ðŸ“¡','ðŸš€','ðŸ›¸','âš¡','ðŸ”‹','ðŸ’¡','ðŸ•¹ï¸','ðŸŽ®','ðŸ¤–','ðŸ”’','ðŸ”‘','ðŸ“¦','â˜•','ðŸ’¾','ðŸ’¿','ðŸ“€','ðŸ“¼','ðŸ–²ï¸','ðŸ“Ÿ','ðŸ“ ','â˜Žï¸','ðŸ“ž','ðŸ”Œ','ðŸ”¦','ðŸ•¯ï¸','â°','â±ï¸','âŒš','ðŸ“º','ðŸ“»','ðŸŽšï¸','ðŸŽ›ï¸','ðŸ§­','ðŸ“¶','ðŸ“³','ðŸ“´','ðŸ”‡','ðŸ”ˆ','ðŸ”‰','ðŸ”Š','ðŸ“¢','ðŸ“£','ðŸ””','ðŸ”•','ðŸ›°ï¸','ðŸ§¬','ðŸ”¬','ðŸ”­','ðŸ§ª','ðŸ§«','âš—ï¸','ðŸ”®']
 };
 
 function initEmojiTabs() {
@@ -533,7 +533,7 @@ voiceBtn.onclick = async () => {
       isRecordingVoice = true;
       voiceBtn.classList.add('recording');
       voiceBtn.title = "Click to Stop & Send";
-    } catch(e) { alert("⚠️ Mic: " + e.message); }
+    } catch(e) { alert("âš ï¸ Mic: " + e.message); }
   } else {
     mediaRecorder.stop();
     isRecordingVoice = false;
@@ -562,8 +562,8 @@ function appendMessageUI(msgId, type, text, fileData = null, fileType = null, fi
   t.textContent = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
   f.appendChild(t);
   const a = document.createElement('div'); a.className = 'msg-actions';
-  if (fileData) { const dl = document.createElement('a'); dl.className = 'btn-action-mini'; dl.href = fileData; dl.download = fileName || 'file'; dl.textContent = '⬇️'; a.appendChild(dl); }
-  const del = document.createElement('button'); del.className = 'btn-action-mini btn-del-msg'; del.textContent = '🗑️';
+  if (fileData) { const dl = document.createElement('a'); dl.className = 'btn-action-mini'; dl.href = fileData; dl.download = fileName || 'file'; dl.textContent = 'â¬‡ï¸'; a.appendChild(dl); }
+  const del = document.createElement('button'); del.className = 'btn-action-mini btn-del-msg'; del.textContent = 'ðŸ—‘ï¸';
   del.onclick = () => showDeleteChoiceModal(msgId, m);
   a.appendChild(del);
   f.appendChild(a); m.appendChild(f);
@@ -650,26 +650,53 @@ function createSilentAudioTrack() {
   } catch(e) { return null; }
 }
 
-function createDummyStream() {
+function createDummyVideoTrack() {
   const canvas = document.createElement('canvas');
-  canvas.width = 320; canvas.height = 240;
+  canvas.width = 640; canvas.height = 480;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#0b0e14'; ctx.fillRect(0, 0, 320, 240);
-  const stream = canvas.captureStream(2);
-  const audioTrack = createSilentAudioTrack();
-  if (audioTrack) stream.addTrack(audioTrack);
+  ctx.fillStyle = '#0b0e14'; ctx.fillRect(0, 0, 640, 480);
+  ctx.fillStyle = '#58a6ff'; ctx.font = '24px monospace';
+  ctx.fillText('💻 GhostNode Session', 180, 240);
+  return canvas.captureStream(10).getVideoTracks()[0];
+}
+
+function createDummyStream() {
+  const stream = new MediaStream();
+  const vt = createDummyVideoTrack();
+  const at = createSilentAudioTrack();
+  if (vt) stream.addTrack(vt);
+  if (at) stream.addTrack(at);
   return stream;
 }
 
-async function getMediaStream() {
-  try {
-    return await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true },
-      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
-    });
-  } catch(e) {
-    return await navigator.mediaDevices.getUserMedia({ audio: true });
+async function getMediaStream(wantAudio = true, wantVideo = true) {
+  let audioTrack = null;
+  let videoTrack = null;
+
+  if (wantAudio) {
+    try {
+      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioTrack = audioStream.getAudioTracks()[0];
+      isMicOn = true;
+    } catch(e) {
+      audioTrack = createSilentAudioTrack();
+    }
   }
+
+  if (wantVideo) {
+    try {
+      const videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+      videoTrack = videoStream.getVideoTracks()[0];
+      isCamOn = true;
+    } catch(e) {
+      videoTrack = createDummyVideoTrack();
+    }
+  }
+
+  const stream = new MediaStream();
+  if (audioTrack) stream.addTrack(audioTrack);
+  if (videoTrack) stream.addTrack(videoTrack);
+  return stream;
 }
 
 // === CALL EVENTS (TWO-WAY SCREEN RENDERING) ===
@@ -685,8 +712,7 @@ function bindCallEvents(call, peerId, name = null) {
     video.muted = true;
     video.playsInline = true;
 
-    audio.srcObject = remoteStream;
-    audio.playsInline = true;
+    audio.srcObject = remoteStream; audio.muted = false; audio.playsInline = true;
 
     video.onloadedmetadata = () => video.play().catch(() => {});
     video.play().catch(() => {});
@@ -717,7 +743,7 @@ function updateGroupCountPill() {
   const c = Object.keys(activeCalls).length + 1;
   const p = document.getElementById('group-participants-count');
   if (!p) return;
-  p.textContent = `👥 ${c} in Session`;
+  p.textContent = `ðŸ‘¥ ${c} in Session`;
   if (c > 2) p.classList.remove('hidden');
 }
 
@@ -725,19 +751,19 @@ function updateHardwareStatusPill() {
   const pill = document.getElementById('studio-media-status');
   if (!pill) return;
   if (isScreenSharing) {
-    pill.textContent = "🖥️ Screen Sharing Active";
+    pill.textContent = "ðŸ–¥ï¸ Screen Sharing Active";
     pill.style.color = "#58a6ff";
   }
   else if (localStream && localStream.getVideoTracks().some(t => t.enabled && t.readyState === 'live')) {
-    pill.textContent = "📷 Camera Active";
+    pill.textContent = "ðŸ“· Camera Active";
     pill.style.color = "#3fb950";
   }
   else if (localStream && localStream.getAudioTracks().some(t => t.enabled && t.readyState === 'live')) {
-    pill.textContent = "🎙️ Mic Active";
+    pill.textContent = "ðŸŽ™ï¸ Mic Active";
     pill.style.color = "#3fb950";
   }
   else {
-    pill.textContent = "🔇 Live Session";
+    pill.textContent = "ðŸ”‡ Live Session";
     pill.style.color = "#58a6ff";
   }
 }
@@ -762,9 +788,9 @@ document.getElementById('btn-start-call').onclick = async () => {
     document.getElementById('local-preview-card').classList.remove('hidden');
   }
   isMicOn = true; isCamOn = true;
-  document.getElementById('btn-toggle-mic').textContent = "🎙️ Mic: ON";
+  document.getElementById('btn-toggle-mic').textContent = "ðŸŽ™ï¸ Mic: ON";
   document.getElementById('btn-toggle-mic').classList.add('active');
-  document.getElementById('btn-toggle-cam').textContent = "📷 Cam: ON";
+  document.getElementById('btn-toggle-cam').textContent = "ðŸ“· Cam: ON";
   document.getElementById('btn-toggle-cam').classList.add('active');
   updateHardwareStatusPill();
 
@@ -804,7 +830,10 @@ function handleIncomingCall(call) {
 document.getElementById('btn-accept-call').onclick = async () => {
   stopRingtone();
   const call = _pendingCall;
-  
+
+  const audioEl = document.getElementById('remote-audio-player');
+  if (audioEl) audioEl.play().catch(() => {});
+
   if (!call) {
     _userAcceptedCall = true;
     document.getElementById('call-status-title').textContent = "Connecting Session...";
@@ -812,15 +841,11 @@ document.getElementById('btn-accept-call').onclick = async () => {
     return;
   }
 
-  // Asli Microphone capture karein taake dono taraf awaz saaf jaye
   if (!localStream) {
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      isMicOn = true;
+    localStream = await getMediaStream(true, true);
+    if (isMicOn) {
       document.getElementById('btn-toggle-mic').textContent = "🎙️ Mic: ON";
       document.getElementById('btn-toggle-mic').classList.add('active');
-    } catch(e) {
-      localStream = createDummyStream();
     }
   }
 
@@ -861,7 +886,7 @@ async function triggerUniversalScreenShare() {
     screenStream = ds;
     isScreenSharing = true;
 
-    // Asli Microphone attach karein taake screen share ke dauran aap ki awaz jaye
+    // Asli Microphone attach karein taake screen share ke dauran aap ki awaz aaye
     let micTrack = null;
     if (localStream && localStream.getAudioTracks().some(t => t.readyState === 'live')) {
       micTrack = localStream.getAudioTracks().find(t => t.readyState === 'live');
@@ -893,15 +918,24 @@ async function triggerUniversalScreenShare() {
     if (conn && conn.open) conn.send({ type: 'screen_state', isSharing: true });
 
     if (Object.keys(activeCalls).length > 0) {
+      let replaced = false;
       Object.values(activeCalls).forEach(call => {
         if (call.peerConnection) {
           const senders = call.peerConnection.getSenders();
           const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-          if (videoSender) videoSender.replaceTrack(screenTrack);
+          if (videoSender) {
+            videoSender.replaceTrack(screenTrack);
+            replaced = true;
+          }
           const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
           if (audioSender && micTrack) audioSender.replaceTrack(micTrack);
         }
       });
+      if (!replaced) {
+        localStream = ds;
+        const sc = peer.call(currentPeerId, ds);
+        bindCallEvents(sc, currentPeerId);
+      }
     } else {
       localStream = ds;
       if (conn && conn.open) conn.send({ type: 'call_ring', isScreen: true });
@@ -967,11 +1001,11 @@ document.getElementById('btn-toggle-mic').onclick = async () => {
         localStream.getAudioTracks().forEach(t => localStream.removeTrack(t));
         localStream.addTrack(at);
       }
-      isMicOn = true; btn.textContent = "🎙️ Mic: ON"; btn.classList.add('active');
+      isMicOn = true; btn.textContent = "ðŸŽ™ï¸ Mic: ON"; btn.classList.add('active');
     } catch(e) { alert("Mic error: " + e.message); }
   } else {
     if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = false);
-    isMicOn = false; btn.textContent = "🎙️ Mic: Off"; btn.classList.remove('active');
+    isMicOn = false; btn.textContent = "ðŸŽ™ï¸ Mic: Off"; btn.classList.remove('active');
   }
   updateHardwareStatusPill();
 };
@@ -1005,7 +1039,7 @@ document.getElementById('btn-toggle-cam').onclick = async () => {
       localStream.addTrack(vt);
 
       isCamOn = true;
-      btn.textContent = "📷 Cam: ON";
+      btn.textContent = "ðŸ“· Cam: ON";
       btn.classList.add('active');
 
       // Laptop ko signal bhejein taake video live render kare
@@ -1017,7 +1051,7 @@ document.getElementById('btn-toggle-cam').onclick = async () => {
     }
   } else {
     isCamOn = false;
-    btn.textContent = "📷 Cam: Off";
+    btn.textContent = "ðŸ“· Cam: Off";
     btn.classList.remove('active');
     document.getElementById('local-preview-card').classList.add('hidden');
     if (lv.srcObject) {
@@ -1097,11 +1131,11 @@ function closeCallModal() {
   
   const m = document.querySelector('.studio-modal');
   if (m) m.classList.remove('floating-share');
-  document.getElementById('btn-toggle-mic').textContent = "🎙️ Mic: Off";
-  document.getElementById('btn-toggle-cam').textContent = "📷 Cam: Off";
+  document.getElementById('btn-toggle-mic').textContent = "ðŸŽ™ï¸ Mic: Off";
+  document.getElementById('btn-toggle-cam').textContent = "ðŸ“· Cam: Off";
   document.getElementById('btn-toggle-mic').classList.remove('active');
   document.getElementById('btn-toggle-cam').classList.remove('active');
-  document.getElementById('btn-toggle-pip').textContent = "⛶ Fullscreen";
+  document.getElementById('btn-toggle-pip').textContent = "â›¶ Fullscreen";
 }
 
 // === PIP / FLOAT / FULLSCREEN ===
@@ -1112,13 +1146,13 @@ document.getElementById('btn-toggle-pip').onclick = async () => {
   modal.classList.remove('floating-share');
   pipState = (pipState + 1) % 3;
   if (pipState === 0) {
-    btn.textContent = '⛶ Fullscreen';
+    btn.textContent = 'â›¶ Fullscreen';
   } else if (pipState === 1) {
     modal.requestFullscreen().catch(() => {});
-    btn.textContent = '⛶ Float';
+    btn.textContent = 'â›¶ Float';
   } else {
     modal.classList.add('floating-share');
-    btn.textContent = '⛶ Exit';
+    btn.textContent = 'â›¶ Exit';
   }
 };
 
@@ -1228,10 +1262,10 @@ function renderContacts() {
     li.className = `contact-item ${c.id === currentPeerId ? 'active' : ''}`;
     li.innerHTML = `
       <div class="contact-info" onclick="switchToPeer('${c.id}', '${c.name}')">
-        <span class="c-name">${online ? '🟢' : '⚪'} ${c.name}</span>
+        <span class="c-name">${online ? 'ðŸŸ¢' : 'âšª'} ${c.name}</span>
         <span class="c-id">${c.id}</span>
       </div>
-      <button class="btn-del-contact" onclick="deleteContact('${c.id}', event)">❌</button>`;
+      <button class="btn-del-contact" onclick="deleteContact('${c.id}', event)">âŒ</button>`;
     l.appendChild(li);
   });
 }
@@ -1260,14 +1294,14 @@ function updateAdminUI() {
     guestMessage.classList.add('hidden');
     deviceBox.classList.remove('hidden');
     groupCallBtn.classList.remove('hidden');
-    adminBtn.textContent = "🔓 Admin Active";
+    adminBtn.textContent = "ðŸ”“ Admin Active";
     renderContacts();
   } else {
     adminControls.classList.add('hidden');
     guestMessage.classList.remove('hidden');
     deviceBox.classList.add('hidden');
     groupCallBtn.classList.add('hidden');
-    adminBtn.textContent = "🔒 Admin";
+    adminBtn.textContent = "ðŸ”’ Admin";
   }
 }
 updateAdminUI();
@@ -1318,3 +1352,6 @@ window.addEventListener('focus', () => document.getElementById('privacy-shield')
 document.addEventListener('contextmenu', e => e.preventDefault());
 
 setTimeout(initEmojiTabs, 100);
+
+
+
