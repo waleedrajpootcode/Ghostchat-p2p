@@ -315,7 +315,11 @@ function handleIncomingData(data, conn) {
   }
   else if (data.type === 'call_ring') {
     playRingtone();
-    sendDesktopNotification(data.isScreen ? "Screen Sharing Session" : "Incoming Call", "Click to view");
+    sendDesktopNotification(data.isScreen ? "Screen Sharing Session" : "Incoming Call", "Click to join");
+    // Call aate hi foran Accept Call ka button screen par show karein
+    document.getElementById('call-modal').classList.remove('hidden');
+    document.getElementById('call-status-title').textContent = `Incoming: ${getContactName(sp) || sp}`;
+    document.getElementById('btn-accept-call').classList.remove('hidden');
   }
   else if (data.type === 'call_accepted') {
     document.getElementById('call-status-title').textContent = "Live Session Active";
@@ -763,19 +767,28 @@ document.getElementById('btn-start-call').onclick = async () => {
   } catch(e) { alert("Call failed: " + e.message); }
 };
 
+let _userAcceptedCall = false;
+
 function handleIncomingCall(call) {
   activeCalls[call.peer] = call;
+  _pendingCall = call;
   if (!currentPeerId) currentPeerId = call.peer;
   bindCallEvents(call, call.peer);
 
-  const modalOpen = !document.getElementById('call-modal').classList.contains('hidden');
-  if (modalOpen && localStream) {
-    try { call.answer(localStream); updateGroupCountPill(); } catch(e) {}
+  // Agar user ne screen par Accept ka button pehle hi daba diya tha
+  if (_userAcceptedCall) {
+    _userAcceptedCall = false;
+    stopRingtone();
+    if (!localStream) localStream = createDummyStream();
+    try { call.answer(localStream); } catch(e) {}
+    document.getElementById('call-status-title').textContent = "Live Session Active";
+    document.getElementById('btn-accept-call').classList.add('hidden');
+    const conn = activeConns[call.peer];
+    if (conn && conn.open) conn.send({ type: 'call_accepted', isGroup: isGroupCallActive });
     return;
   }
 
   playRingtone();
-  _pendingCall = call;
   document.getElementById('call-modal').classList.remove('hidden');
   document.getElementById('call-status-title').textContent = `Incoming: ${getContactName(call.peer) || call.peer}`;
   document.getElementById('btn-accept-call').classList.remove('hidden');
@@ -784,8 +797,15 @@ function handleIncomingCall(call) {
 document.getElementById('btn-accept-call').onclick = async () => {
   stopRingtone();
   const call = _pendingCall;
-  if (!call) return;
   
+  // Agar call packet abhi raste mein hai to flag set karein taake aate hi attend ho jaye
+  if (!call) {
+    _userAcceptedCall = true;
+    document.getElementById('call-status-title').textContent = "Connecting Session...";
+    document.getElementById('btn-accept-call').classList.add('hidden');
+    return;
+  }
+
   if (!localStream) {
     localStream = createDummyStream();
   }
@@ -797,6 +817,7 @@ document.getElementById('btn-accept-call').onclick = async () => {
   }
 
   _pendingCall = null;
+  _userAcceptedCall = false;
   document.getElementById('btn-accept-call').classList.add('hidden');
   document.getElementById('call-status-title').textContent = "Live Session Active";
   updateHardwareStatusPill();
