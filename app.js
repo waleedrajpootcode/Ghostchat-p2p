@@ -313,6 +313,13 @@ function handleIncomingData(data, conn) {
     if (el) el.remove();
     deleteMessageLocally(data.msgId);
   }
+  else if (data.type === 'cam_state') {
+    const remoteVid = document.getElementById('remote-stream-video');
+    if (data.isCamOn) {
+      document.getElementById('remote-stream-label').textContent = `${getContactName(sp) || sp} (Camera)`;
+      if (remoteVid) remoteVid.play().catch(() => {});
+    }
+  }
   else if (data.type === 'call_ring') {
     playRingtone();
     sendDesktopNotification(data.isScreen ? "Screen Sharing Session" : "Incoming Call", "Click to join");
@@ -798,7 +805,6 @@ document.getElementById('btn-accept-call').onclick = async () => {
   stopRingtone();
   const call = _pendingCall;
   
-  // Agar call packet abhi raste mein hai to flag set karein taake aate hi attend ho jaye
   if (!call) {
     _userAcceptedCall = true;
     document.getElementById('call-status-title').textContent = "Connecting Session...";
@@ -806,8 +812,16 @@ document.getElementById('btn-accept-call').onclick = async () => {
     return;
   }
 
+  // Asli Microphone capture karein taake dono taraf awaz saaf jaye
   if (!localStream) {
-    localStream = createDummyStream();
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      isMicOn = true;
+      document.getElementById('btn-toggle-mic').textContent = "🎙️ Mic: ON";
+      document.getElementById('btn-toggle-mic').classList.add('active');
+    } catch(e) {
+      localStream = createDummyStream();
+    }
   }
 
   try {
@@ -847,8 +861,22 @@ async function triggerUniversalScreenShare() {
     screenStream = ds;
     isScreenSharing = true;
 
-    const silentAudio = createSilentAudioTrack();
-    if (silentAudio) ds.addTrack(silentAudio);
+    // Asli Microphone attach karein taake screen share ke dauran aap ki awaz jaye
+    let micTrack = null;
+    if (localStream && localStream.getAudioTracks().some(t => t.readyState === 'live')) {
+      micTrack = localStream.getAudioTracks().find(t => t.readyState === 'live');
+    } else {
+      try {
+        const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micTrack = ms.getAudioTracks()[0];
+        isMicOn = true;
+        document.getElementById('btn-toggle-mic').textContent = "🎙️ Mic: ON";
+        document.getElementById('btn-toggle-mic').classList.add('active');
+      } catch(e) {
+        micTrack = createSilentAudioTrack();
+      }
+    }
+    if (micTrack) ds.addTrack(micTrack);
 
     const screenTrack = ds.getVideoTracks()[0];
 
@@ -869,9 +897,9 @@ async function triggerUniversalScreenShare() {
         if (call.peerConnection) {
           const senders = call.peerConnection.getSenders();
           const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-          if (videoSender) {
-            videoSender.replaceTrack(screenTrack);
-          }
+          if (videoSender) videoSender.replaceTrack(screenTrack);
+          const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+          if (audioSender && micTrack) audioSender.replaceTrack(micTrack);
         }
       });
     } else {
@@ -953,22 +981,58 @@ document.getElementById('btn-toggle-cam').onclick = async () => {
   const lv = document.getElementById('local-stream-video');
   if (!isCamOn) {
     try {
+      // Mobile-safe camera constraints jo Android/iOS par crash nahi hotay
       const cs = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
       const vt = cs.getVideoTracks()[0];
       lv.srcObject = cs;
+      lv.muted = true;
+      lv.play().catch(() => {});
       document.getElementById('local-preview-card').classList.remove('hidden');
+
       Object.values(activeCalls).forEach(c => {
         if (c.peerConnection) {
           const s = c.peerConnection.getSenders().find(x => x.track && x.track.kind === 'video');
-          if (s) s.replaceTrack(vt);
+          if (s) {
+            s.replaceTrack(vt);
+          } else {
+            c.peerConnection.addTrack(vt, cs);
+          }
         }
       });
-      isCamOn = true; btn.textContent = "📷 Cam: ON"; btn.classList.add('active');
-    } catch(e) { alert("Cam error: " + e.message); }
+
+      if (!localStream) localStream = new MediaStream();
+      localStream.getVideoTracks().forEach(t => localStream.removeTrack(t));
+      localStream.addTrack(vt);
+
+      isCamOn = true;
+      btn.textContent = "📷 Cam: ON";
+      btn.classList.add('active');
+
+      // Laptop ko signal bhejein taake video live render kare
+      const conn = getActiveConn();
+      if (conn && conn.open) conn.send({ type: 'cam_state', isCamOn: true });
+
+    } catch(e) {
+      alert("Camera error: " + e.message);
+    }
   } else {
-    isCamOn = false; btn.textContent = "📷 Cam: Off"; btn.classList.remove('active');
+    isCamOn = false;
+    btn.textContent = "📷 Cam: Off";
+    btn.classList.remove('active');
     document.getElementById('local-preview-card').classList.add('hidden');
-    if (lv.srcObject) { lv.srcObject.getTracks().forEach(t => t.stop()); lv.srcObject = null; }
+    if (lv.srcObject) {
+      lv.srcObject.getVideoTracks().forEach(t => t.stop());
+      lv.srcObject = null;
+    }
+    const dummy = createDummyStream().getVideoTracks()[0];
+    Object.values(activeCalls).forEach(c => {
+      if (c.peerConnection) {
+        const s = c.peerConnection.getSenders().find(x => x.track && x.track.kind === 'video');
+        if (s) s.replaceTrack(dummy);
+      }
+    });
+    const conn = getActiveConn();
+    if (conn && conn.open) conn.send({ type: 'cam_state', isCamOn: false });
   }
   updateHardwareStatusPill();
 };
