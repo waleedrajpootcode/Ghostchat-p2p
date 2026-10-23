@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // GHOSTNODE v10.5 — Verified Production Engine
 // ============================================================
 const ADMIN_PIN = "2007";
@@ -96,7 +96,7 @@ function switchToPeer(peerId, name) {
     generateE2EEFingerprint(myId, peerId);
     startLatencyTracker(peerId);
   } else {
-    document.getElementById('connection-status').textContent = 'â— Connecting...';
+    document.getElementById('connection-status').textContent = '● Connecting...';
     document.getElementById('connection-status').className = 'status-offline';
     document.getElementById('current-contact-name').textContent = name || peerId;
     loadContactMessages(peerId);
@@ -238,7 +238,7 @@ function setupConnection(conn, name = null) {
   conn.on('close', () => {
     delete activeConns[conn.peer];
     if (currentPeerId === conn.peer) {
-      document.getElementById('connection-status').textContent = 'â— Scanning...';
+      document.getElementById('connection-status').textContent = '● Scanning...';
       document.getElementById('connection-status').className = 'status-offline';
       document.getElementById('latency-badge').classList.add('hidden');
       document.getElementById('e2ee-fingerprint').classList.add('hidden');
@@ -258,7 +258,7 @@ function startLatencyTracker(peerId) {
 }
 
 function updateOnlineUI(name) {
-  document.getElementById('connection-status').textContent = `â— Online: ${name}`;
+  document.getElementById('connection-status').textContent = `● Online: ${name}`;
   document.getElementById('connection-status').className = 'status-online';
   document.getElementById('current-contact-name').textContent = name;
   const gs = document.getElementById('guest-status-text');
@@ -341,7 +341,7 @@ function handleIncomingData(data, conn) {
     const remoteVid = document.getElementById('remote-stream-video');
 
     if (data.isSharing) {
-      title.textContent = `ðŸ–¥ï¸ ${getContactName(sp) || sp} is Sharing Screen`;
+      title.textContent = `🖥️ ${getContactName(sp) || sp} is Sharing Screen`;
       if (grid) grid.classList.add('maximized-remote');
       if (remoteVid) remoteVid.play().catch(() => {});
     } else {
@@ -533,7 +533,7 @@ voiceBtn.onclick = async () => {
       isRecordingVoice = true;
       voiceBtn.classList.add('recording');
       voiceBtn.title = "Click to Stop & Send";
-    } catch(e) { alert("âš ï¸ Mic: " + e.message); }
+    } catch(e) { alert("🎙️ Mic: " + e.message); }
   } else {
     mediaRecorder.stop();
     isRecordingVoice = false;
@@ -562,8 +562,8 @@ function appendMessageUI(msgId, type, text, fileData = null, fileType = null, fi
   t.textContent = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
   f.appendChild(t);
   const a = document.createElement('div'); a.className = 'msg-actions';
-  if (fileData) { const dl = document.createElement('a'); dl.className = 'btn-action-mini'; dl.href = fileData; dl.download = fileName || 'file'; dl.textContent = 'â¬‡ï¸'; a.appendChild(dl); }
-  const del = document.createElement('button'); del.className = 'btn-action-mini btn-del-msg'; del.textContent = 'ðŸ—‘ï¸';
+  if (fileData) { const dl = document.createElement('a'); dl.className = 'btn-action-mini'; dl.href = fileData; dl.download = fileName || 'file'; dl.textContent = '⬇️'; a.appendChild(dl); }
+  const del = document.createElement('button'); del.className = 'btn-action-mini btn-del-msg'; del.textContent = '🗑️';
   del.onclick = () => showDeleteChoiceModal(msgId, m);
   a.appendChild(del);
   f.appendChild(a); m.appendChild(f);
@@ -712,7 +712,23 @@ function bindCallEvents(call, peerId, name = null) {
     video.muted = true;
     video.playsInline = true;
 
-    audio.srcObject = remoteStream; audio.muted = false; audio.playsInline = true;
+    const vTracks = remoteStream.getVideoTracks();
+    const aTracks = remoteStream.getAudioTracks();
+    if (vTracks.length > 0) {
+      video.srcObject = new MediaStream(vTracks);
+      video.muted = true;
+      video.playsInline = true;
+      video.onloadedmetadata = () => video.play().catch(() => {});
+      video.play().catch(() => {});
+    }
+    if (aTracks.length > 0) {
+      audio.srcObject = new MediaStream(aTracks);
+      audio.muted = false;
+      audio.playsInline = true;
+      audio.play().catch(() => {
+        document.getElementById('btn-unmute-audio').classList.remove('hidden');
+      });
+    }
 
     video.onloadedmetadata = () => video.play().catch(() => {});
     video.play().catch(() => {});
@@ -751,7 +767,7 @@ function updateHardwareStatusPill() {
   const pill = document.getElementById('studio-media-status');
   if (!pill) return;
   if (isScreenSharing) {
-    pill.textContent = "ðŸ–¥ï¸ Screen Sharing Active";
+    pill.textContent = "💻 Screen Sharing Active";
     pill.style.color = "#58a6ff";
   }
   else if (localStream && localStream.getVideoTracks().some(t => t.enabled && t.readyState === 'live')) {
@@ -759,7 +775,7 @@ function updateHardwareStatusPill() {
     pill.style.color = "#3fb950";
   }
   else if (localStream && localStream.getAudioTracks().some(t => t.enabled && t.readyState === 'live')) {
-    pill.textContent = "ðŸŽ™ï¸ Mic Active";
+    pill.textContent = "🎙️ Mic Active";
     pill.style.color = "#3fb950";
   }
   else {
@@ -788,7 +804,7 @@ document.getElementById('btn-start-call').onclick = async () => {
     document.getElementById('local-preview-card').classList.remove('hidden');
   }
   isMicOn = true; isCamOn = true;
-  document.getElementById('btn-toggle-mic').textContent = "ðŸŽ™ï¸ Mic: ON";
+  document.getElementById('btn-toggle-mic').textContent = "🎙️ Mic: ON";
   document.getElementById('btn-toggle-mic').classList.add('active');
   document.getElementById('btn-toggle-cam').textContent = "📷 Cam: ON";
   document.getElementById('btn-toggle-cam').classList.add('active');
@@ -891,8 +907,9 @@ async function triggerUniversalScreenShare() {
     try {
       ds = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
     } catch(err) {
-      console.warn("Screen share cancelled:", err);
-      return;
+      try {
+        ds = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      } catch(e2) { return; }
     }
 
     if (!ds || !ds.getVideoTracks().length) return;
@@ -1018,11 +1035,11 @@ document.getElementById('btn-toggle-mic').onclick = async () => {
         localStream.getAudioTracks().forEach(t => localStream.removeTrack(t));
         localStream.addTrack(at);
       }
-      isMicOn = true; btn.textContent = "ðŸŽ™ï¸ Mic: ON"; btn.classList.add('active');
+      isMicOn = true; btn.textContent = "🎙️ Mic: ON"; btn.classList.add('active');
     } catch(e) { alert("Mic error: " + e.message); }
   } else {
     if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = false);
-    isMicOn = false; btn.textContent = "ðŸŽ™ï¸ Mic: Off"; btn.classList.remove('active');
+    isMicOn = false; btn.textContent = "🎙️ Mic: Off"; btn.classList.remove('active');
   }
   updateHardwareStatusPill();
 };
@@ -1148,7 +1165,7 @@ function closeCallModal() {
   
   const m = document.querySelector('.studio-modal');
   if (m) m.classList.remove('floating-share');
-  document.getElementById('btn-toggle-mic').textContent = "ðŸŽ™ï¸ Mic: Off";
+  document.getElementById('btn-toggle-mic').textContent = "🎙️ Mic: Off";
   document.getElementById('btn-toggle-cam').textContent = "📷 Cam: Off";
   document.getElementById('btn-toggle-mic').classList.remove('active');
   document.getElementById('btn-toggle-cam').classList.remove('active');
@@ -1282,7 +1299,7 @@ function renderContacts() {
         <span class="c-name">${online ? '🟢' : '⚪'} ${c.name}</span>
         <span class="c-id">${c.id}</span>
       </div>
-      <button class="btn-del-contact" onclick="deleteContact('${c.id}', event)">âŒ</button>`;
+      <button class="btn-del-contact" onclick="deleteContact('${c.id}', event)">❌</button>`;
     l.appendChild(li);
   });
 }
@@ -1369,6 +1386,3 @@ window.addEventListener('focus', () => document.getElementById('privacy-shield')
 document.addEventListener('contextmenu', e => e.preventDefault());
 
 setTimeout(initEmojiTabs, 100);
-
-
-
